@@ -24,10 +24,17 @@ export default function TitleBar({ isCollapsed, onToggleCollapse, showAccount, s
         <div className="title-bar-left">
           <div style={{
             width: 28, height: 28, borderRadius: 6,
-            background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+            background: 'linear-gradient(135deg, #0ea5e9, #2563eb)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontSize: 13, fontWeight: 700,
-          }}>查</div>
+            boxShadow: '0 1px 3px rgba(37,99,235,0.3)',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2z" fill="none" stroke="#fff" strokeWidth="1.5"/>
+              <path d="M8 14c1.5 2 5.5 2 8 0" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="9" cy="10" r="1.2" fill="#fff"/>
+              <circle cx="15" cy="10" r="1.2" fill="#fff"/>
+            </svg>
+          </div>
           <span style={{ fontSize: 14, fontWeight: 600 }}>查查鱼 - 住院医AI助手</span>
           <span
             style={{

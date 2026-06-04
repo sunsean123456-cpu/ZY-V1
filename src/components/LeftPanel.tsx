@@ -202,9 +202,9 @@ export default function LeftPanel({
       </div>
 
       <div className="patient-list">
-        <PatientGroup title="📋 术前患者" groupPatients={preOpPatients} type="pre-op" groupKey="preOp" />
-        <PatientGroup title="🩹 术后患者" groupPatients={postOpPatients} type="post-op" groupKey="postOp" />
-        <PatientGroup title="📁 历史患者" groupPatients={historicalPatients} type="historical" groupKey="historical" />
+        <PatientGroup title="术前患者" groupPatients={preOpPatients} type="pre-op" groupKey="preOp" />
+        <PatientGroup title="术后患者" groupPatients={postOpPatients} type="post-op" groupKey="postOp" />
+        <PatientGroup title="历史患者" groupPatients={historicalPatients} type="historical" groupKey="historical" />
       </div>
 
       <button className="add-patient-btn" onClick={() => setShowAddPatient(true)}>
