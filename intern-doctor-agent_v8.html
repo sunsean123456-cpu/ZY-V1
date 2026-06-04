@@ -1,0 +1,1654 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>住院医生AI助手 v8</title>
+<script src="https://modao.cc/agent-py/static/source/js/tailwindcss.js"></script>
+<script src="https://modao.cc/agent-py/static/source/js/iconify-icon.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif; background: #1a1a2e; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; }
+
+/* 窗口 */
+.app-window { width: 1200px; height: 780px; min-width: 900px; min-height: 600px; background: #fff; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.5); position: relative; resize: both; transition: width 0.3s; }
+.app-window.collapsed { width: 900px; }
+.app-window.simplified { width: 100vw; height: 100vh; border-radius: 0; }
+.title-bar { height: 44px; background: #1a2332; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; flex-shrink: 0; user-select: none; cursor: default; transition: background 0.3s; }
+.title-bar.shake { animation: shake 0.1s linear 30; background: #7f1d1d !important; }
+@keyframes shake { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+.title-bar-left { display: flex; align-items: center; gap: 8px; color: #e2e8f0; font-size: 13px; font-weight: 600; }
+.title-bar-left iconify-icon { font-size: 18px; color: #60a5fa; }
+.title-bar-actions { display: flex; gap: 2px; }
+.title-btn { width: 32px; height: 26px; display: flex; align-items: center; justify-content: center; color: #94a3b8; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.15s; border: none; background: transparent; }
+.title-btn:hover { background: #334155; color: #fff; }
+.title-btn.close:hover { background: #dc2626; color: #fff; }
+.title-bar-extra { display: flex; gap: 4px; align-items: center; }
+.mode-btn { padding: 4px 10px; background: #2d3748; border: 1px solid #4a5568; border-radius: 4px; color: #cbd5e1; font-size: 10px; cursor: pointer; transition: all 0.15s; }
+.mode-btn:hover { background: #374151; border-color: #3b82f6; }
+
+/* 主体 */
+.app-body { display: flex; flex: 1; overflow: hidden; transition: all 0.3s; }
+
+/* 左侧面板 */
+.left-panel { width: 240px; background: #1e293b; display: flex; flex-direction: column; flex-shrink: 0; border-right: 1px solid #2d3748; transition: width 0.3s, opacity 0.3s; overflow: hidden; }
+.left-panel.collapsed { width: 0; opacity: 0; border-right: none; }
+
+/* 智能助手入口 */
+.assistant-entry { padding: 12px; border-bottom: 1px solid #2d3748; }
+.assistant-btn { width: 100%; padding: 10px 12px; background: linear-gradient(135deg, #059669, #10b981); border: none; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.15s; }
+.assistant-btn:hover { background: linear-gradient(135deg, #047857, #059669); }
+.assistant-btn .ab-icon { width: 24px; height: 24px; background: rgba(255,255,255,0.2); border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+
+/* 患者选择 */
+.patient-selector { padding: 12px; position: relative; }
+.select-trigger { width: 100%; padding: 8px 30px 8px 10px; background: #2d3748; border: 1px solid #4a5568; border-radius: 6px; color: #e2e8f0; font-size: 12px; cursor: pointer; outline: none; transition: border 0.2s; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.select-trigger:hover { border-color: #3b82f6; }
+.select-arrow { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; font-size: 12px; }
+.dropdown-list { display: none; position: absolute; top: 100%; left: 12px; right: 12px; background: #2d3748; border: 1px solid #4a5568; border-radius: 6px; z-index: 100; max-height: 240px; overflow-y: auto; margin-top: 2px; }
+.dropdown-list.open { display: block; }
+.dropdown-item { padding: 8px 10px; cursor: pointer; border-bottom: 1px solid #374151; color: #cbd5e1; font-size: 12px; transition: background 0.15s; display: flex; align-items: center; justify-content: space-between; }
+.dropdown-item:last-child { border-bottom: none; }
+.dropdown-item:hover { background: #374151; }
+.dd-name { font-weight: 500; color: #e2e8f0; }
+.dd-bed { font-size: 10px; color: #64748b; background: #374151; padding: 1px 6px; border-radius: 4px; }
+.dd-dx { font-size: 10px; color: #94a3b8; }
+.dropdown-search { padding: 6px; border-bottom: 1px solid #374151; }
+.dropdown-search input { width: 100%; padding: 5px 8px; background: #1e293b; border: 1px solid #4a5568; border-radius: 4px; color: #e2e8f0; font-size: 11px; outline: none; }
+/* 患者分组 */
+.patient-group { margin-bottom: 4px; }
+.group-header { display: flex; align-items: center; padding: 6px 10px; cursor: pointer; user-select: none; transition: background 0.15s; border-radius: 4px; }
+.group-header:hover { background: #334155; }
+.group-arrow { font-size: 10px; color: #94a3b8; margin-right: 4px; transition: transform 0.2s; }
+.group-arrow.expanded { transform: rotate(90deg); }
+.group-title { flex: 1; font-size: 11px; font-weight: 600; color: #cbd5e1; }
+.group-badge { font-size: 10px; color: #64748b; background: #374151; padding: 1px 6px; border-radius: 8px; }
+.group-list { padding: 0 4px; }
+.group-list.hidden { display: none; }
+
+.patient-list { flex: 1; overflow-y: auto; padding: 4px 8px; }
+.patient-list::-webkit-scrollbar { width: 3px; }
+.patient-list::-webkit-scrollbar-track { background: transparent; }
+.patient-list::-webkit-scrollbar-thumb { background: #4a5568; border-radius: 3px; }
+.patient-item { display: flex; align-items: center; padding: 8px 10px; margin: 2px 0; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+.patient-item:hover { background: #334155; }
+.patient-item.active { background: #1e3a5f; }
+.patient-item .patient-tag { font-size: 9px; padding: 1px 4px; border-radius: 3px; margin-left: 4px; }
+.patient-tag.pre-op { background: #fef3c7; color: #92400e; }
+.patient-tag.post-op { background: #dbeafe; color: #1e40af; }
+.patient-tag.historical { background: #f3f4f6; color: #6b7280; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; flex-shrink: 0; }
+.status-dot.online { background: #22c55e; }
+.status-dot.offline { background: #64748b; }
+.status-dot.has-msg { background: #f59e0b; box-shadow: 0 0 4px #f59e0b; }
+.pi-info { flex: 1; min-width: 0; }
+.pi-name { font-size: 12px; font-weight: 500; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pi-bed { font-size: 10px; color: #64748b; }
+.badge-dot { width: 18px; height: 18px; background: #dc2626; color: #fff; border-radius: 50%; font-size: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+.patient-count { font-size: 10px; color: #64748b; padding: 4px 12px 8px; text-align: center; }
+
+/* 面板底部 */
+.panel-footer { padding: 10px 12px; border-top: 1px solid #2d3748; background: #1a2332; }
+.footer-label { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+.toggle-label { font-size: 11px; color: #cbd5e1; display: flex; align-items: center; gap: 5px; }
+.toggle-switch { position: relative; width: 36px; height: 20px; background: #475569; border-radius: 10px; cursor: pointer; transition: background 0.2s; flex-shrink: 0; }
+.toggle-switch.active { background: #3b82f6; }
+.toggle-switch .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
+.toggle-switch.active .knob { transform: translateX(16px); }
+.footer-actions { display: flex; gap: 6px; margin-top: 8px; }
+.footer-btn { flex: 1; padding: 6px; background: #2d3748; border: 1px solid #4a5568; border-radius: 6px; color: #cbd5e1; font-size: 10px; cursor: pointer; text-align: center; transition: all 0.15s; }
+.footer-btn:hover { background: #374151; border-color: #3b82f6; }
+
+/* 折叠选择器（折叠后显示） */
+.collapse-selector { display: none; padding: 8px 12px; background: #fff; border-bottom: 1px solid #e2e8f0; align-items: center; gap: 8px; }
+.collapse-selector.show { display: flex; }
+.collapse-select { flex: 1; padding: 6px 10px; background: #f8fafc; border: 1px solid #d1d5db; border-radius: 6px; font-size: 12px; cursor: pointer; outline: none; }
+.collapse-assistant-btn { padding: 6px 12px; background: linear-gradient(135deg, #059669, #10b981); border: none; border-radius: 6px; color: #fff; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 4px; transition: all 0.15s; }
+.collapse-assistant-btn:hover { background: linear-gradient(135deg, #047857, #059669); }
+
+/* 登录页面 */
+.login-overlay { position: fixed; inset: 0; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); z-index: 10000; display: flex; justify-content: center; align-items: center; }
+.login-overlay.hidden { display: none; }
+.login-box { background: #fff; border-radius: 16px; padding: 40px; width: 400px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.login-logo { text-align: center; margin-bottom: 30px; }
+.login-logo iconify-icon { font-size: 48px; color: #3b82f6; }
+.login-logo h2 { font-size: 20px; color: #1e293b; margin-top: 10px; font-weight: 600; }
+.login-logo p { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+.login-field { margin-bottom: 16px; }
+.login-field label { display: block; font-size: 12px; color: #475569; margin-bottom: 6px; font-weight: 500; }
+.login-field input { width: 100%; padding: 10px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; outline: none; transition: border 0.2s; }
+.login-field input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+.login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #2563eb, #3b82f6); border: none; border-radius: 8px; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; margin-top: 8px; }
+.login-btn:hover { background: linear-gradient(135deg, #1d4ed8, #2563eb); }
+.login-error { color: #dc2626; font-size: 11px; margin-top: 8px; text-align: center; display: none; }
+.login-error.show { display: block; }
+
+/* 账号管理弹窗 */
+.account-tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px; }
+.account-tab { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid #e5e7eb; background: #fff; color: #64748b; transition: all 0.15s; }
+.account-tab:hover { border-color: #93c5fd; color: #1d4ed8; }
+.account-tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.account-panel { display: none; }
+.account-panel.active { display: block; }
+.profile-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding: 16px; background: #f8fafc; border-radius: 10px; }
+.profile-avatar { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #2563eb, #3b82f6); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 22px; font-weight: 600; }
+.profile-info h4 { font-size: 15px; color: #1e293b; font-weight: 600; }
+.profile-info p { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+.setting-row-inline { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
+.setting-row-inline:last-child { border-bottom: none; }
+.setting-label-inline { font-size: 12px; color: #475569; }
+.setting-value-inline { font-size: 12px; color: #1e293b; font-weight: 500; }
+.logout-btn { width: 100%; padding: 10px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; color: #dc2626; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; margin-top: 16px; }
+.logout-btn:hover { background: #fee2e2; }
+
+/* 右侧聊天区 */
+.chat-panel { flex: 1; display: flex; flex-direction: column; background: #f0f2f5; min-width: 0; }
+.chat-header { padding: 12px 18px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.chat-header.assistant-header { background: #f0fdf4; border-bottom-color: #86efac; }
+.ch-left { display: flex; align-items: center; gap: 10px; }
+.ch-name { font-size: 14px; font-weight: 600; color: #1e293b; }
+.ch-name.assistant-name { color: #059669; }
+.ch-dx { font-size: 11px; color: #64748b; background: #f1f5f9; padding: 2px 8px; border-radius: 4px; }
+.ch-meta { font-size: 11px; color: #94a3b8; }
+.ch-refresh { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; color: #64748b; transition: all 0.15s; border: none; background: transparent; font-size: 14px; }
+.ch-refresh:hover { background: #f1f5f9; color: #3b82f6; }
+
+/* 工具栏：日期选择 + 搜索 */
+.chat-toolbar { padding: 8px 18px; background: #fff; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.toolbar-date { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; color: #475569; cursor: pointer; background: #f8fafc; outline: none; transition: border 0.2s; }
+.toolbar-date:hover { border-color: #3b82f6; }
+.toolbar-search { flex: 1; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 11px; color: #475569; background: #f8fafc; outline: none; transition: border 0.2s; }
+.toolbar-search:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
+.toolbar-btn { padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; border: 1px solid #d1d5db; background: #f8fafc; color: #475569; transition: all 0.15s; }
+.toolbar-btn:hover { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+.toolbar-btn.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+
+/* 搜索结果 */
+.search-results { padding: 8px 18px; background: #f0f7ff; border-bottom: 1px solid #bfdbfe; display: none; }
+.search-results.open { display: block; }
+.search-results-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.search-results-count { font-size: 11px; color: #1d4ed8; font-weight: 600; }
+.search-results-close { font-size: 11px; color: #64748b; cursor: pointer; }
+.search-result-item { padding: 6px 10px; margin: 4px 0; background: #fff; border-radius: 6px; cursor: pointer; font-size: 11px; line-height: 1.6; color: #374151; transition: background 0.15s; }
+.search-result-item:hover { background: #eff6ff; }
+.search-result-item .sr-time { color: #94a3b8; font-size: 10px; }
+.search-result-item mark { background: #fef08a; padding: 0 2px; border-radius: 2px; }
+
+/* 消息区 */
+.messages-area { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.messages-area::-webkit-scrollbar { width: 5px; }
+.messages-area::-webkit-scrollbar-track { background: transparent; }
+.messages-area::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+.date-divider { text-align: center; font-size: 11px; color: #94a3b8; padding: 8px 0; position: relative; }
+.date-divider::before, .date-divider::after { content: ''; position: absolute; top: 50%; width: 30%; height: 1px; background: #e2e8f0; }
+.date-divider::before { left: 0; }
+.date-divider::after { right: 0; }
+
+/* 时间折叠块 */
+.time-block { margin: 6px 0; }
+.time-block-header { display: flex; align-items: center; gap: 6px; padding: 4px 8px; background: #f8fafc; border-radius: 6px; cursor: pointer; font-size: 10px; color: #64748b; transition: all 0.15s; user-select: none; }
+.time-block-header:hover { background: #f1f5f9; }
+.time-block-header .tb-arrow { transition: transform 0.2s; font-size: 8px; }
+.time-block-header.collapsed .tb-arrow { transform: rotate(-90deg); }
+.time-block-body { padding: 4px 0 4px 8px; }
+.time-block-body.hidden { display: none; }
+
+/* 消息 */
+.message { display: flex; gap: 8px; max-width: 85%; margin: 2px 0; animation: msgIn 0.2s ease-out; }
+@keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.msg-left { align-self: flex-start; }
+.msg-right { align-self: flex-end; flex-direction: row-reverse; }
+.msg-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.msg-avatar iconify-icon { font-size: 16px; color: #fff; }
+.bubble { padding: 10px 14px; border-radius: 10px; font-size: 12.5px; line-height: 1.6; color: #1e293b; position: relative; min-width: 80px; }
+.msg-left .bubble { border-top-left-radius: 2px; }
+.msg-right .bubble { border-top-right-radius: 2px; }
+.msg-time { font-size: 10px; color: #94a3b8; margin-top: 4px; display: block; }
+
+/* 医生消息 - 微信绿 */
+.type-doctor .bubble { background: #95ec6f; border: 1px solid #86d662; }
+.type-doctor .msg-avatar { background: #07c160; }
+.type-doctor .bubble-label { font-size: 10px; color: #07c160; font-weight: 600; margin-bottom: 4px; text-align: right; }
+
+/* AI助手 - 右侧 */
+.type-ai { align-self: flex-end; flex-direction: row-reverse; }
+.type-ai .bubble { background: #eff6ff; border: 1px solid #bfdbfe; border-top-right-radius: 2px; border-top-left-radius: 10px; }
+.type-ai .msg-avatar { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+.type-ai .bubble-label { font-size: 10px; color: #2563eb; font-weight: 600; margin-bottom: 4px; text-align: right; }
+
+/* 检验科 */
+.type-lab .bubble { background: #fffbeb; border: 1px solid #fde68a; border-left: 3px solid #f59e0b; }
+.type-lab .msg-avatar { background: #d97706; }
+.type-lab .bubble-label { font-size: 10px; color: #d97706; font-weight: 600; margin-bottom: 4px; }
+
+/* 护士 */
+.type-nurse .bubble { background: #fef2f2; border: 1px solid #fecaca; border-left: 3px solid #ef4444; }
+.type-nurse .msg-avatar { background: #dc2626; }
+.type-nurse .bubble-label { font-size: 10px; color: #dc2626; font-weight: 600; margin-bottom: 4px; }
+
+/* 家属 */
+.type-family .bubble { background: #f3f4f6; border: 1px solid #d1d5db; }
+.type-family .msg-avatar { background: #4b5563; }
+.type-family .bubble-label { font-size: 10px; color: #4b5563; font-weight: 600; margin-bottom: 4px; }
+
+/* 影像科 */
+.type-imaging .bubble { background: #eff6ff; border: 1px solid #bfdbfe; border-left: 3px solid #3b82f6; }
+.type-imaging .msg-avatar { background: #1d4ed8; }
+.type-imaging .bubble-label { font-size: 10px; color: #1d4ed8; font-weight: 600; margin-bottom: 4px; }
+
+/* 会诊 - 右侧 */
+.type-consult { align-self: flex-end; flex-direction: row-reverse; }
+.type-consult .bubble { background: #dbeafe; border: 1px solid #bfdbfe; border-top-right-radius: 2px; border-top-left-radius: 10px; }
+.type-consult .msg-avatar { background: linear-gradient(135deg, #6d28d9, #7c3aed); }
+.type-consult .bubble-label { font-size: 10px; color: #6d28d9; font-weight: 600; margin-bottom: 4px; text-align: right; }
+
+/* AI分析结构 */
+.ai-conclusion { font-size: 13px; font-weight: 600; color: #1e40af; padding: 6px 10px; background: #eff6ff; border-radius: 6px; margin-bottom: 8px; }
+.ai-section { margin-bottom: 8px; }
+.ai-section-title { font-size: 11px; font-weight: 600; color: #1e40af; margin-bottom: 4px; }
+.ai-section-content { font-size: 12px; line-height: 1.7; color: #374151; padding-left: 4px; }
+.ai-risk { font-size: 12px; color: #dc2626; font-weight: 600; padding: 6px 10px; background: #fef2f2; border-radius: 6px; border-left: 3px solid #dc2626; margin-top: 6px; }
+
+/* 操作按钮 */
+.bubble-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.msg-right .bubble-actions { justify-content: flex-end; }
+.bubble-btn { padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; border: 1px solid #e2e8f0; background: #fff; color: #475569; transition: all 0.15s; white-space: nowrap; }
+.bubble-btn:hover { border-color: #93c5fd; color: #1d4ed8; background: #f0f7ff; }
+.bubble-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.bubble-btn.primary:hover { background: #1d4ed8; }
+.bubble-btn.confirmed { background: #dcfce7; border-color: #86efac; color: #16a34a; cursor: default; }
+
+/* 输入区 */
+.input-area { padding: 12px 18px 14px; background: #fff; border-top: 1px solid #e2e8f0; flex-shrink: 0; }
+.input-area.assistant-input { background: #f0fdf4; border-top-color: #86efac; }
+.input-row { display: flex; gap: 6px; align-items: flex-end; }
+.input-row textarea { flex: 1; padding: 9px 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 13px; outline: none; resize: none; font-family: inherit; line-height: 1.5; min-height: 36px; max-height: 100px; transition: border 0.2s; }
+.input-row textarea:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+.input-row textarea.assistant-input-field { border-color: #86efac; }
+.input-row textarea.assistant-input-field:focus { border-color: #10b981; box-shadow: 0 0 0 2px rgba(16,185,129,0.15); }
+.icon-btn { width: 36px; height: 36px; background: #f1f5f9; border: 1px solid #d1d5db; border-radius: 8px; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; position: relative; }
+.icon-btn:hover { background: #e2e8f0; color: #3b82f6; border-color: #3b82f6; }
+.icon-btn iconify-icon { font-size: 18px; }
+.icon-btn.recording { background: #fef2f2; border-color: #ef4444; color: #ef4444; animation: recordPulse 1s infinite; }
+@keyframes recordPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); } }
+.send-btn { width: 42px; height: 36px; background: #3b82f6; border: none; border-radius: 8px; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s; flex-shrink: 0; }
+.send-btn:hover { background: #2563eb; }
+.send-btn.assistant-send { background: #10b981; }
+.send-btn.assistant-send:hover { background: #059669; }
+.send-btn iconify-icon { font-size: 18px; }
+.quick-bar { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.quick-btn { padding: 4px 12px; border-radius: 9999px; font-size: 11px; cursor: pointer; border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; transition: all 0.15s; white-space: nowrap; }
+.quick-btn:hover { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+
+/* 上传菜单 */
+.upload-menu { display: none; position: absolute; bottom: 100%; right: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 100; padding: 6px; min-width: 160px; margin-bottom: 4px; }
+.upload-menu.open { display: block; }
+.upload-item { padding: 8px 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; border-radius: 6px; font-size: 12px; color: #374151; transition: background 0.1s; }
+.upload-item:hover { background: #f0f7ff; color: #1d4ed8; }
+.upload-item .ui-icon { width: 24px; height: 24px; background: #f1f5f9; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
+/* 弹窗 */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 1000; justify-content: center; align-items: center; }
+.modal-overlay.open { display: flex; }
+.modal-box { background: #fff; border-radius: 12px; padding: 20px; width: 520px; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.modal-box h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+.modal-close { float: right; cursor: pointer; color: #94a3b8; font-size: 18px; border: none; background: none; }
+.record-preview { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; font-size: 11.5px; line-height: 1.8; color: #374151; max-height: 280px; overflow-y: auto; }
+.record-preview .section-title { font-weight: 600; color: #1a1a1a; margin: 10px 0 4px; font-size: 12px; }
+.order-preview { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; }
+.order-item { padding: 8px 0; border-bottom: 1px dashed #e5e7eb; }
+.order-item:last-child { border-bottom: none; }
+.order-name { font-weight: 600; color: #1a1a1a; font-size: 12px; }
+.order-detail { color: #6b7280; font-size: 11px; margin-top: 2px; }
+.consult-detail { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; }
+.consult-dept { font-weight: 600; color: #7c3aed; font-size: 11px; margin-bottom: 4px; }
+.consult-content { font-size: 11.5px; color: #374151; padding: 4px 0; border-bottom: 1px dashed #e5e7eb; }
+.consult-content:last-child { border-bottom: none; }
+
+.setting-group { margin-bottom: 16px; }
+.setting-group-title { font-size: 12px; font-weight: 600; color: #1e293b; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
+.setting-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+.setting-label { font-size: 12px; color: #475569; }
+.setting-control { display: flex; gap: 4px; }
+.setting-opt { padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; border: 1px solid #e5e7eb; background: #fff; color: #64748b; transition: all 0.15s; }
+.setting-opt:hover { border-color: #93c5fd; color: #1d4ed8; }
+.setting-opt.selected { background: #2563eb; color: #fff; border-color: #2563eb; }
+.setting-input { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; outline: none; width: 120px; }
+.setting-input:focus { border-color: #2563eb; }
+
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+.modal-btn { padding: 6px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; border: 1px solid #e5e5e5; background: #fff; color: #4b5563; }
+.modal-btn.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.modal-btn.primary:hover { background: #1d4ed8; }
+
+.trend-chart { width: 100%; height: 260px; }
+
+/* 决策风格下拉 */
+.style-select { padding: 4px 8px; background: #2d3748; border: 1px solid #4a5568; border-radius: 4px; color: #cbd5e1; font-size: 11px; cursor: pointer; outline: none; }
+.style-select option { background: #2d3748; color: #e2e8f0; }
+
+/* 风险脉冲 */
+.risk-alert .bubble { animation: riskPulse 0.5s ease-in-out 6; border-color: #dc2626 !important; }
+@keyframes riskPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+</style>
+</head>
+<body>
+
+<!-- 登录页面 -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <div class="login-logo">
+      <iconify-icon icon="mdi:robot-medical"></iconify-icon>
+      <h2>住院医生AI助手</h2>
+      <p>请登录您的账号</p>
+    </div>
+    <div class="login-field">
+      <label>工号 / 用户名</label>
+      <input type="text" id="loginUser" placeholder="请输入工号或用户名" value="admin"/>
+    </div>
+    <div class="login-field">
+      <label>密码</label>
+      <input type="password" id="loginPass" placeholder="请输入密码" value="123456" onkeydown="if(event.key==='Enter')doLogin()"/>
+    </div>
+    <div class="login-error" id="loginError">工号或密码错误，请重试</div>
+    <button class="login-btn" onclick="doLogin()">登 录</button>
+    <p style="text-align:center;font-size:11px;color:#94a3b8;margin-top:16px;">演示账号：admin / 123456</p>
+  </div>
+</div>
+
+<div class="app-window" id="appWindow">
+  <div class="title-bar" id="titleBar">
+    <div class="title-bar-left">
+      <iconify-icon icon="mdi:robot-medical"></iconify-icon>
+      <span>住院医生AI助手</span>
+    </div>
+    <div class="title-bar-extra">
+      <button class="mode-btn" onclick="toggleCollapse()" id="collapseBtn">折叠</button>
+      <button class="mode-btn" onclick="showAccountModal()" title="账号管理">👤</button>
+    </div>
+    <div class="title-bar-actions">
+      <button class="title-btn" onclick="minimizeWindow()">—</button>
+      <button class="title-btn" onclick="maximizeWindow()">□</button>
+      <button class="title-btn close" onclick="closeWindow()">✕</button>
+    </div>
+  </div>
+
+  <!-- 折叠选择器 -->
+  <div class="collapse-selector" id="collapseSelector">
+    <button class="collapse-assistant-btn" onclick="switchToAssistant()">
+      <iconify-icon icon="mdi:brain" style="font-size:14px;"></iconify-icon>
+      智能助手
+    </button>
+    <select class="collapse-select" id="collapseSelect" onchange="switchFromCollapse(this.value)">
+      <option value="">选择患者...</option>
+    </select>
+  </div>
+
+  <div class="app-body">
+    <!-- 左侧面板 -->
+    <div class="left-panel" id="leftPanel">
+      <div class="assistant-entry">
+        <button class="assistant-btn" onclick="switchToAssistant()">
+          <span class="ab-icon"><iconify-icon icon="mdi:brain" style="font-size:14px;color:#fff;"></iconify-icon></span>
+          智能助手
+        </button>
+      </div>
+
+      <div class="patient-selector">
+        <div class="select-trigger" id="selectTrigger" onclick="toggleDropdown()">
+          <span id="selectedPatientName">张建国 | 12床</span>
+        </div>
+        <span class="select-arrow">▾</span>
+        <div class="dropdown-list" id="dropdownList">
+          <div class="dropdown-search">
+            <input id="searchInput" oninput="filterDropdown(this.value)" placeholder="搜索患者姓名..." type="text"/>
+          </div>
+          <div id="dropdownItems"></div>
+        </div>
+      </div>
+      <div class="patient-list" id="patientList"></div>
+      <div class="patient-count">当前: 5位在院患者</div>
+
+      <div class="panel-footer">
+        <div class="footer-label">设置</div>
+        <div class="toggle-row">
+          <span class="toggle-label">决策风格</span>
+          <select class="style-select" onchange="onStyleChange(this.value)">
+            <option value="审慎型">审慎型</option>
+            <option value="标准型" selected>标准型</option>
+            <option value="积极型">积极型</option>
+          </select>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">会诊模式</span>
+          <div class="toggle-switch" onclick="toggleConsultMode(this)"><div class="knob"></div></div>
+        </div>
+        <div class="toggle-row">
+          <span class="toggle-label">联网搜索</span>
+          <div class="toggle-switch active" onclick="toggleWebSearch(this)"><div class="knob"></div></div>
+        </div>
+        <div class="footer-actions">
+          <div class="footer-btn" onclick="showAssistantSetting()">AI助手设置</div>
+          <div class="footer-btn" onclick="showUploadModal()">患者资料上传</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右侧聊天 -->
+    <div class="chat-panel">
+      <div class="chat-header" id="chatHeader">
+        <div class="ch-left">
+          <span class="ch-name" id="chName">张建国</span>
+          <span class="ch-dx" id="chDx">急性脑梗死 | 2型糖尿病 | 高血压</span>
+          <span class="ch-meta" id="chMeta">住院号: ZY20260527008 | 12床</span>
+        </div>
+        <button class="ch-refresh" onclick="refreshSession()" title="刷新会话">
+          <iconify-icon icon="mdi:refresh"></iconify-icon>
+        </button>
+      </div>
+      <!-- 工具栏：日期选择 + 搜索 -->
+      <div class="chat-toolbar" id="chatToolbar">
+        <input type="date" class="toolbar-date" id="toolbarDate" onchange="filterByDate(this.value)" title="选择日期查看当天记录"/>
+        <input type="text" class="toolbar-search" id="toolbarSearch" placeholder="🔍 搜索对话内容、关键词..." oninput="debounceSearch(this.value)"/>
+        <button class="toolbar-btn" onclick="clearFilters()">清除</button>
+      </div>
+      <!-- 搜索结果 -->
+      <div class="search-results" id="searchResults">
+        <div class="search-results-header">
+          <span class="search-results-count" id="searchCount">找到 0 条结果</span>
+          <span class="search-results-close" onclick="clearSearch()">✕ 清除</span>
+        </div>
+        <div id="searchResultsList"></div>
+      </div>
+      <div class="messages-area" id="messagesArea"></div>
+      <div class="input-area" id="inputArea">
+        <div class="input-row" style="position:relative;">
+          <button class="icon-btn" onclick="toggleUploadMenu()" title="上传资料">
+            <iconify-icon icon="mdi:paperclip"></iconify-icon>
+          </button>
+          <div class="upload-menu" id="uploadMenu">
+            <div class="upload-item" onclick="uploadAction('photo')"><span class="ui-icon">📷</span> 拍照上传</div>
+            <div class="upload-item" onclick="uploadAction('image')"><span class="ui-icon">🖼️</span> 上传图片</div>
+            <div class="upload-item" onclick="uploadAction('voice')"><span class="ui-icon">🎤</span> 语音输入</div>
+            <div class="upload-item" onclick="uploadAction('text')"><span class="ui-icon">⌨️</span> 文字输入</div>
+            <div class="upload-item" onclick="uploadAction('file')"><span class="ui-icon">📁</span> 文件导入</div>
+          </div>
+          <button class="icon-btn" onclick="toggleRecording()" id="recordBtn" title="语音输入/查房模式">
+            <iconify-icon icon="mdi:microphone"></iconify-icon>
+          </button>
+          <textarea id="msgInput" oninput="autoResize(this)" onkeydown="onInputKeydown(event)" placeholder="输入消息..." rows="1"></textarea>
+          <button class="send-btn" onclick="sendMessage()"><iconify-icon icon="mdi:send"></iconify-icon></button>
+        </div>
+        <div class="quick-bar" id="quickBar">
+          <button class="quick-btn" onclick="showRecordModal()">生成病历</button>
+          <button class="quick-btn" onclick="showOrderModal()">开单建议</button>
+          <button class="quick-btn" onclick="quickAction('综合研判')">综合研判</button>
+          <button class="quick-btn" onclick="triggerConsult()">会诊</button>
+          <button class="quick-btn" onclick="openTrendModal()">查看趋势</button>
+          <button class="quick-btn" onclick="showHandoverModal()">交班摘要</button>
+          <button class="quick-btn" onclick="showDRGModal()">DRG分析</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 病历弹窗 -->
+<div class="modal-overlay" id="recordModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('recordModal')">✕</button>
+    <h3>住院病历预览</h3>
+    <div class="record-preview" id="recordContent"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('recordModal')">取消</button>
+      <button class="modal-btn" onclick="editRecord()">修改</button>
+      <button class="modal-btn primary" onclick="submitRecord()">确认提交</button>
+    </div>
+  </div>
+</div>
+
+<!-- 开单弹窗 -->
+<div class="modal-overlay" id="orderModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('orderModal')">✕</button>
+    <h3>检查/医嘱建议</h3>
+    <div class="order-preview" id="orderContent"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('orderModal')">取消</button>
+      <button class="modal-btn" onclick="editOrder()">修改</button>
+      <button class="modal-btn primary" onclick="submitOrder()">确认提交</button>
+    </div>
+  </div>
+</div>
+
+<!-- 会诊弹窗 -->
+<div class="modal-overlay" id="consultModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('consultModal')">✕</button>
+    <h3>多学科联合会诊意见</h3>
+    <div class="consult-detail" id="consultContent"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('consultModal')">关闭</button>
+      <button class="modal-btn primary" onclick="submitConsult()">确认执行</button>
+    </div>
+  </div>
+</div>
+
+<!-- 趋势弹窗 -->
+<div class="modal-overlay" id="trendModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeTrendModal()">✕</button>
+    <h3>检验指标趋势图</h3>
+    <div class="trend-chart" id="trendChart"></div>
+    <p style="font-size:11px;color:#94a3b8;margin-top:8px;text-align:center;">近7日 WBC / CRP / NEUT% 变化趋势</p>
+  </div>
+</div>
+
+<!-- 交班摘要弹窗 -->
+<div class="modal-overlay" id="handoverModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('handoverModal')">✕</button>
+    <h3>交班摘要</h3>
+    <div class="record-preview" id="handoverContent"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('handoverModal')">关闭</button>
+      <button class="modal-btn" onclick="exportHandover()">导出</button>
+      <button class="modal-btn primary" onclick="submitHandover()">确认发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- DRG弹窗 -->
+<div class="modal-overlay" id="drgModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('drgModal')">✕</button>
+    <h3>DRG/DIP 分析</h3>
+    <div class="record-preview" id="drgContent"></div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('drgModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- AI助手设置 -->
+<div class="modal-overlay" id="assistantSettingModal">
+  <div class="modal-box" style="width:480px;">
+    <button class="modal-close" onclick="closeModal('assistantSettingModal')">✕</button>
+    <h3>AI助手设置</h3>
+    <div class="setting-group">
+      <div class="setting-group-title">基础设置</div>
+      <div class="setting-row"><span class="setting-label">助手称呼</span><input class="setting-input" value="小医"/></div>
+      <div class="setting-row"><span class="setting-label">头像</span><div class="setting-control"><div class="setting-opt selected">🤖</div><div class="setting-opt">👨‍⚕️</div><div class="setting-opt">🧠</div></div></div>
+    </div>
+    <div class="setting-group">
+      <div class="setting-group-title">沟通风格</div>
+      <div class="setting-row"><span class="setting-label">语气</span><div class="setting-control"><div class="setting-opt selected">严谨</div><div class="setting-opt">温和</div><div class="setting-opt">简洁</div></div></div>
+      <div class="setting-row"><span class="setting-label">详细程度</span><div class="setting-control"><div class="setting-opt">详细</div><div class="setting-opt selected">适中</div><div class="setting-opt">精简</div></div></div>
+      <div class="setting-row"><span class="setting-label">推送频率</span><div class="setting-control"><div class="setting-opt">频繁</div><div class="setting-opt selected">适中</div><div class="setting-opt">精简</div></div></div>
+    </div>
+    <div class="setting-group">
+      <div class="setting-group-title">决策偏好</div>
+      <div class="setting-row"><span class="setting-label">预警敏感度</span><div class="setting-control"><div class="setting-opt">高</div><div class="setting-opt selected">中</div><div class="setting-opt">低</div></div></div>
+      <div class="setting-row"><span class="setting-label">消息合并</span><div class="setting-control"><div class="setting-opt selected">开启</div><div class="setting-opt">关闭</div></div></div>
+      <div class="setting-row"><span class="setting-label">夜间免打扰</span><div style="display:flex;align-items:center;gap:6px;"><input class="setting-input" value="22:00" style="width:70px;"/> - <input class="setting-input" value="07:00" style="width:70px;"/></div></div>
+    </div>
+    <div class="setting-group">
+      <div class="setting-group-title">专业设置</div>
+      <div class="setting-row"><span class="setting-label">专业深度</span><div class="setting-control"><div class="setting-opt">住院医</div><div class="setting-opt selected">主治</div><div class="setting-opt">主任</div></div></div>
+      <div class="setting-row"><span class="setting-label">多语言</span><div class="setting-control"><div class="setting-opt selected">中文</div><div class="setting-opt">中英双语</div></div></div>
+      <div class="setting-row"><span class="setting-label">免责声明</span><div class="setting-control"><div class="setting-opt selected">始终显示</div><div class="setting-opt">仅关键决策</div><div class="setting-opt">不显示</div></div></div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('assistantSettingModal')">取消</button>
+      <button class="modal-btn primary" onclick="saveSetting()">保存设置</button>
+    </div>
+  </div>
+</div>
+
+<!-- 上传弹窗 -->
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal('uploadModal')">✕</button>
+    <h3>患者资料上传</h3>
+    <p style="font-size:12px;color:#64748b;margin-bottom:12px;">上传患者资料，AI自动识别并归类至对应患者对话</p>
+    <div class="setting-group">
+      <div class="setting-group-title">上传方式</div>
+      <div class="setting-row"><span class="setting-label">拍照上传</span><span style="font-size:11px;color:#64748b;">检验单、影像资料、化验单</span></div>
+      <div class="setting-row"><span class="setting-label">图片上传</span><span style="font-size:11px;color:#64748b;">已有图片文件</span></div>
+      <div class="setting-row"><span class="setting-label">语音输入</span><span style="font-size:11px;color:#64748b;">查房录音、口述记录</span></div>
+      <div class="setting-row"><span class="setting-label">文字输入</span><span style="font-size:11px;color:#64748b;">手动录入体征、症状</span></div>
+      <div class="setting-row"><span class="setting-label">文件导入</span><span style="font-size:11px;color:#64748b;">PDF、Word、Excel等</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="closeModal('uploadModal')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 退出确认 -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box" style="width:300px;text-align:center;">
+    <p style="font-size:14px;margin:10px 0 16px;">是否退出系统？</p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="bubble-btn" onclick="document.getElementById('confirmModal').classList.remove('open')">取消</button>
+      <button class="bubble-btn" onclick="doExit()" style="background:#dc2626;color:#fff;border-color:#dc2626;">确认退出</button>
+    </div>
+  </div>
+</div>
+
+<!-- 账号管理弹窗 -->
+<div class="modal-overlay" id="accountModal">
+  <div class="modal-box" style="width:520px;">
+    <button class="modal-close" onclick="closeModal('accountModal')">✕</button>
+    <h3>账号管理</h3>
+    
+    <div class="account-tabs">
+      <div class="account-tab active" onclick="switchAccountTab('profile')">个人信息</div>
+      <div class="account-tab" onclick="switchAccountTab('settings')">个人设置</div>
+      <div class="account-tab" onclick="switchAccountTab('security')">安全设置</div>
+    </div>
+    
+    <!-- 个人信息 -->
+    <div class="account-panel active" id="panel-profile">
+      <div class="profile-header">
+        <div class="profile-avatar" id="profileAvatar">孙</div>
+        <div class="profile-info">
+          <h4 id="profileName">孙医生</h4>
+          <p id="profileRole">住院医师 | 神经内科</p>
+        </div>
+      </div>
+      <div class="setting-row-inline">
+        <span class="setting-label-inline">工号</span>
+        <span class="setting-value-inline">DOC-2024001</span>
+      </div>
+      <div class="setting-row-inline">
+        <span class="setting-label-inline">手机号</span>
+        <span class="setting-value-inline">138****8888</span>
+      </div>
+      <div class="setting-row-inline">
+        <span class="setting-label-inline">邮箱</span>
+        <span class="setting-value-inline">doctor@hospital.com</span>
+      </div>
+      <div class="setting-row-inline">
+        <span class="setting-label-inline">科室</span>
+        <span class="setting-value-inline">神经内科</span>
+      </div>
+      <div class="setting-row-inline">
+        <span class="setting-label-inline">职称</span>
+        <span class="setting-value-inline">住院医师</span>
+      </div>
+      <div class="setting-row-inline">
+        <span class="setting-label-inline">最后登录</span>
+        <span class="setting-value-inline" id="lastLogin">2026-05-29 23:00</span>
+      </div>
+    </div>
+    
+    <!-- 个人设置 -->
+    <div class="account-panel" id="panel-settings">
+      <div class="setting-group">
+        <div class="setting-group-title">界面设置</div>
+        <div class="setting-row"><span class="setting-label">字体大小</span><div class="setting-control"><div class="setting-opt">小</div><div class="setting-opt selected">中</div><div class="setting-opt">大</div></div></div>
+        <div class="setting-row"><span class="setting-label">消息气泡</span><div class="setting-control"><div class="setting-opt selected">微信风格</div><div class="setting-opt">简洁风格</div></div></div>
+        <div class="setting-row"><span class="setting-label">折叠左侧面板</span><div class="toggle-switch" onclick="toggleCollapse();closeModal('accountModal')"><div class="knob"></div></div></div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">通知设置</div>
+        <div class="setting-row"><span class="setting-label">新消息提醒</span><div class="toggle-switch active" onclick="this.classList.toggle('active')"><div class="knob"></div></div></div>
+        <div class="setting-row"><span class="setting-label">危急值推送</span><div class="toggle-switch active" onclick="this.classList.toggle('active')"><div class="knob"></div></div></div>
+        <div class="setting-row"><span class="setting-label">声音提醒</span><div class="toggle-switch" onclick="this.classList.toggle('active')"><div class="knob"></div></div></div>
+        <div class="setting-row"><span class="setting-label">夜间免打扰</span><div style="display:flex;align-items:center;gap:6px;"><input class="setting-input" value="22:00" style="width:70px;"/> - <input class="setting-input" value="07:00" style="width:70px;"/></div></div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">AI助手偏好</div>
+        <div class="setting-row"><span class="setting-label">决策风格</span><div class="setting-control"><div class="setting-opt">审慎型</div><div class="setting-opt selected">标准型</div><div class="setting-opt">积极型</div></div></div>
+        <div class="setting-row"><span class="setting-label">推送详细程度</span><div class="setting-control"><div class="setting-opt">详细</div><div class="setting-opt selected">适中</div><div class="setting-opt">精简</div></div></div>
+        <div class="setting-row"><span class="setting-label">自动刷新间隔</span><select class="style-select" style="background:#fff;border:1px solid #d1d5db;color:#475569;"><option>30秒</option><option selected>1分钟</option><option>3分钟</option></select></div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn" onclick="closeModal('accountModal')">取消</button>
+        <button class="modal-btn primary" onclick="savePersonalSettings()">保存设置</button>
+      </div>
+    </div>
+    
+    <!-- 安全设置 -->
+    <div class="account-panel" id="panel-security">
+      <div class="setting-group">
+        <div class="setting-group-title">修改密码</div>
+        <div class="login-field"><label>当前密码</label><input type="password" placeholder="请输入当前密码"/></div>
+        <div class="login-field"><label>新密码</label><input type="password" placeholder="请输入新密码"/></div>
+        <div class="login-field"><label>确认新密码</label><input type="password" placeholder="请再次输入新密码"/></div>
+        <button class="modal-btn primary" onclick="alert('密码修改成功');closeModal('accountModal');" style="width:100%;margin-top:8px;">修改密码</button>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">登录设备</div>
+        <div class="setting-row-inline">
+          <span class="setting-label-inline">🖥️ 孙原的MacBook Air</span>
+          <span class="setting-value-inline" style="color:#22c55e;">当前设备</span>
+        </div>
+        <div class="setting-row-inline">
+          <span class="setting-label-inline">📱 iPhone 15 Pro</span>
+          <span class="setting-value-inline" style="color:#94a3b8;">2026-05-28</span>
+        </div>
+      </div>
+      <div class="setting-group">
+        <div class="setting-group-title">操作日志</div>
+        <div style="font-size:11px;color:#64748b;line-height:1.8;">
+          • 2026-05-29 23:00 登录成功 (MacBook Air)<br>
+          • 2026-05-29 08:30 登录成功 (iPhone 15 Pro)<br>
+          • 2026-05-28 22:15 登录成功 (MacBook Air)<br>
+          • 2026-05-28 09:00 修改密码
+        </div>
+      </div>
+      <button class="logout-btn" onclick="doLogout()">退出登录</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://modao.cc/agent-py/static/source/js/echarts.min.js"></script>
+<script>
+// ========== 登录 & 账号管理 ==========
+function doLogin() {
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value.trim();
+  const errEl = document.getElementById('loginError');
+  
+  // 演示账号验证
+  if (user === 'admin' && pass === '123456') {
+    errEl.classList.remove('show');
+    document.getElementById('loginOverlay').classList.add('hidden');
+    // 更新最后登录时间
+    const now = new Date();
+    const timeStr = now.getFullYear() + '-' + 
+      String(now.getMonth()+1).padStart(2,'0') + '-' + 
+      String(now.getDate()).padStart(2,'0') + ' ' + 
+      String(now.getHours()).padStart(2,'0') + ':' + 
+      String(now.getMinutes()).padStart(2,'0');
+    document.getElementById('lastLogin').textContent = timeStr;
+    return;
+  }
+  
+  // 其他账号也允许登录（演示用）
+  if (user && pass) {
+    errEl.classList.remove('show');
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('profileName').textContent = user;
+    document.getElementById('profileAvatar').textContent = user.charAt(0).toUpperCase();
+    return;
+  }
+  
+  errEl.classList.add('show');
+}
+
+function doLogout() {
+  closeModal('accountModal');
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+}
+
+function showAccountModal() {
+  document.getElementById('accountModal').classList.add('open');
+  switchAccountTab('profile');
+}
+
+function switchAccountTab(tab) {
+  // 更新 tab 样式
+  document.querySelectorAll('.account-tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.account-panel').forEach(el => el.classList.remove('active'));
+  
+  // 找到对应的 tab 和 panel
+  const tabs = document.querySelectorAll('.account-tab');
+  const panels = document.querySelectorAll('.account-panel');
+  const tabMap = { profile: 0, settings: 1, security: 2 };
+  
+  if (tabs[tabMap[tab]]) tabs[tabMap[tab]].classList.add('active');
+  if (panels[tabMap[tab]]) panels[tabMap[tab]].classList.add('active');
+}
+
+function savePersonalSettings() {
+  closeModal('accountModal');
+  // 这里可以添加实际保存逻辑
+  showToast('个人设置已保存');
+}
+
+function showToast(msg) {
+  const toast = document.createElement('div');
+  toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;box-shadow:0 4px 12px rgba(0,0,0,0.2);animation:fadeInOut 2s ease;';
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 2000);
+}
+
+// 添加 toast 动画
+const style = document.createElement('style');
+style.textContent = '@keyframes fadeInOut { 0% { opacity:0; transform:translateX(-50%) translateY(-10px); } 15% { opacity:1; transform:translateX(-50%) translateY(0); } 85% { opacity:1; } 100% { opacity:0; } }';
+document.head.appendChild(style);
+
+// ========== 原有代码 ==========
+const patients = [
+  {
+    id: 'p1', name: '张建国', sex: '男', age: 72, bed: '12床',
+    admission: 'ZY20260527008', dx: '急性脑梗死 | 2型糖尿病 | 高血压',
+    status: 'has-msg', unread: 2, statusText: '有新消息',
+    group: 'pre-op', // pre-op | post-op | historical
+    surgeryType: '待评估',
+    initialMsgs: [
+      { type:'doctor', text:'张建国患者今日新入院，右侧肢体无力伴言语不清3小时，既往高血压糖尿病史。请AI评估溶栓指征。', time:'09:35' },
+      { type:'ai', text:'<div class="ai-conclusion">患者72岁男性，发病3小时，NIHSS约8分，在溶栓时间窗内。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 青霉素过敏史，需避免相关药物<br>• eGFR 58ml/min，肾功能轻度异常<br>• 需完善头颅CT排除出血</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 急查头颅CT平扫<br>② 凝血功能+血常规+血糖<br>③ 血压控制在180/105mmHg以下方可溶栓</div></div>', time:'09:38' },
+      { type:'doctor', text:'已开具头颅CT和凝血功能检查。家属反映今早头晕。', time:'10:02' },
+    ],
+    pushSequence: [
+      { type:'lab', text:'WBC 12.3↑ (参考值 4.0-10.0)\nCRP 45↑ (参考值 <5)\nNEUT% 85.2↑ (参考值 40-75)\n报告时间: 14:32', time:'14:32' },
+      { type:'ai', text:'<div class="ai-conclusion">WBC和CRP显著升高，提示感染/炎症反应。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• WBC 12.3↑，NEUT% 85.2↑，支持细菌感染<br>• CRP 45↑，炎症指标明显升高<br>• 结合脑梗死后卧床状态，需警惕肺部感染</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 完善降钙素原(PCT)检测<br>② 胸部X光检查<br>③ 加强体温监测（q4h）</div></div>', time:'14:34', actions:true },
+      { type:'nurse', text:'BP 158/92↑\nHR 92\nT 37.8℃↑\nSpO2 95%\n测量时间: 14:50', time:'14:50' },
+      { type:'ai', text:'<div class="ai-conclusion">血压偏高、体温轻度升高，结合检验结果，感染可能性大。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• BP 158/92↑，高于目标值<br>• T 37.8℃↑，低热<br>• SpO2 95%，处于临界值</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 抗感染同时监测血压<br>② 必要时调整降压方案<br>③ 持续高热可能增加神经损伤风险</div></div>', time:'14:52', actions:true },
+      { type:'family', text:'张建国今天早上说有点头晕，量了血压158/92，比平时高。还有咳嗽有痰，白色黏痰。\n\n家属反馈时间: 14:15', time:'14:15' },
+      { type:'ai', text:'<div class="ai-conclusion">家属反馈与当前体征、检验结果一致，支持呼吸道感染判断。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 头晕与血压偏高(158/92)相符<br>• 咳嗽有痰 + WBC/CRP升高，进一步支持呼吸道感染</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 完善胸部影像检查<br>② PCT检测<br>③ 今日加测血压q4h<br>④ 考虑经验性抗感染治疗</div></div>', time:'14:55', actions:true },
+    ],
+    record: `<div class="section-title">入院记录</div>\n\n患者姓名：张建国  性别：男  年龄：72岁\n住院号：ZY20260527008  床位：12床\n\n<div class="section-title">主诉</div>\n右侧肢体无力伴言语不清3小时\n\n<div class="section-title">现病史</div>\n患者今日上午突发右侧肢体无力，伴言语不清，无意识障碍，无抽搐。既往高血压病史10年，2型糖尿病史8年。\n\n<div class="section-title">既往史</div>\n高血压10年，2型糖尿病8年。青霉素过敏史。\n\n<div class="section-title">体格检查</div>\nBP 158/92mmHg，神清，运动性失语，右侧鼻唇沟变浅，右上肢肌力3级，右下肢肌力4级，右侧Babinski征(+)。\n\n<div class="section-title">辅助检查</div>\n• WBC 12.3×10⁹/L↑\n• CRP 45mg/L↑\n• NEUT% 85.2%↑\n• eGFR 58ml/min\n\n<div class="section-title">初步诊断</div>\n1. 急性脑梗死（左侧大脑中动脉供血区）\n2. 2型糖尿病\n3. 高血压病3级（极高危）\n4. 疑似肺部感染`,
+    orders: [
+      { name: '头颅CT平扫', detail: '急诊，排除脑出血' },
+      { name: '凝血功能+血常规', detail: '评估溶栓条件' },
+      { name: '胸部X光(正位)', detail: '排查肺部感染' },
+      { name: '降钙素原(PCT)', detail: '评估细菌感染' },
+      { name: '阿替普酶 0.9mg/kg', detail: '静脉溶栓（CT排除出血后）' },
+      { name: '阿司匹林 100mg qd', detail: '抗血小板' },
+      { name: '血压监测 q4h', detail: '溶栓期间密切监测' },
+    ],
+    consult: [
+      { dept: '神经内科', content: '建议溶栓治疗，NIHSS 8分，获益大于风险。溶栓后密切监测神经功能变化。' },
+      { dept: '心内科', content: '合并糖尿病+高血压，注意血压管理。溶栓前后BP<180/105mmHg。' },
+      { dept: '呼吸科', content: 'WBC/CRP升高，建议胸部CT排查肺部感染。经验性抗感染治疗。' },
+      { dept: '药学部', content: 'eGFR 58，抗生素需调整剂量。避免肾毒性药物联用。' },
+    ],
+    trends: { wbc: [4.2,5.1,6.8,8.5,10.2,11.8,12.3], crp: [2,5,12,22,32,40,45], neut: [55,60,68,72,78,82,85.2] }
+  },
+  {
+    id: 'p2', name: '李秀英', sex: '女', age: 65, bed: '8床',
+    admission: 'ZY20260526015', dx: '肺炎 | 冠心病',
+    status: 'online', unread: 0, statusText: '在线',
+    group: 'post-op', surgeryType: '阑尾切除术后第3天',
+    initialMsgs: [
+      { type:'doctor', text:'李秀英因发热咳嗽3天入院，既往冠心病史，请AI评估感染严重程度。', time:'08:20' },
+      { type:'ai', text:'<div class="ai-conclusion">65岁女性，社区获得性肺炎可能性大。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 冠心病史需注意感染诱发心功能不全<br>• 需评估感染严重程度（CURB-65评分）</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 血常规+CRP+PCT<br>② 胸部CT平扫<br>③ 心电图+心肌酶谱</div></div>', time:'08:23' },
+    ],
+    pushSequence: [
+      { type:'lab', text:'体温 38.5℃↑\nCRP 78↑↑ (参考值 <5)\nPCT 2.1↑ (参考值 <0.5)\nWBC 14.5↑ (参考值 4.0-10.0)', time:'10:10' },
+      { type:'ai', text:'<div class="ai-conclusion">CRP明显升高、PCT 2.1提示细菌感染可能性大。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• PCT 2.1↑，强烈提示细菌感染<br>• WBC 14.5↑，支持感染诊断<br>• 冠心病患者在感染应激下需关注心功能</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 启动经验性抗感染治疗<br>② 监测心电图变化<br>③ 评估心功能</div></div>', time:'10:12', actions:true },
+      { type:'imaging', text:'胸部CT：右肺下叶斑片状密度增高影，考虑社区获得性肺炎。\n未见胸腔积液。\n结论：右肺下叶肺炎', time:'11:05' },
+      { type:'ai', text:'<div class="ai-conclusion">胸部CT证实右肺下叶肺炎，与临床诊断一致。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 右肺下叶斑片状密度增高影<br>• 未见胸腔积液<br>• 注意：避免使用对心脏有影响的氟喹诺酮类药物</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 选择对心脏安全的抗生素<br>② 继续监测心功能<br>③ 48-72小时复查评估疗效</div></div>', time:'11:08', actions:true },
+    ],
+    record: `<div class="section-title">病程记录</div>\n\n患者：李秀英，女，65岁，8床\n日期：2026-05-27\n\n<div class="section-title">今日病情</div>\n患者发热咳嗽3天后入院，体温最高38.5℃。\n\n<div class="section-title">辅助检查</div>\n• WBC 14.5×10⁹/L↑\n• CRP 78mg/L↑↑\n• PCT 2.1ng/mL↑\n• 胸部CT：右肺下叶肺炎\n\n<div class="section-title">诊疗计划</div>\n1. 启动经验性抗感染治疗\n2. 监测心功能\n3. 对症支持治疗`,
+    orders: [
+      { name: '头孢曲松 2g qd', detail: '经验性抗感染（避开氟喹诺酮）' },
+      { name: '氨溴索 30mg tid', detail: '祛痰' },
+      { name: '心电图 qd×3天', detail: '监测心功能变化' },
+      { name: '心肌酶谱', detail: '基线评估' },
+    ],
+    consult: [
+      { dept: '呼吸科', content: '社区获得性肺炎，建议头孢曲松+阿奇霉素联合治疗。' },
+      { dept: '心内科', content: '冠心病史，避免氟喹诺酮类，监测心电图。' },
+    ],
+    trends: { wbc: [4.0,5.5,7.2,9.8,12.1,13.8,14.5], crp: [1,3,8,25,45,65,78], neut: [50,55,62,68,74,79,82] }
+  },
+  {
+    id: 'p3', name: '王德福', sex: '男', age: 58, bed: '15床',
+    admission: 'ZY20260520032', dx: '肝硬化（Child-Pugh B级）',
+    status: 'offline', unread: 0, statusText: '离线',
+    group: 'historical', surgeryType: '已出院',
+    initialMsgs: [
+      { type:'doctor', text:'王德福酒精性肝硬化，Child-Pugh B级，出现腹水。请AI评估治疗方案。', time:'昨天 15:10' },
+      { type:'ai', text:'<div class="ai-conclusion">Child-Pugh B级，存在腹水，需注意门脉高压并发症。</div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 限钠利尿治疗<br>② 监测肝肾功能、凝血<br>③ 定期腹水评估<br>④ 戒酒教育</div></div>', time:'昨天 15:13' },
+    ],
+    pushSequence: [
+      { type:'lab', text:'ALT 68↑ (参考值 <40)\nAST 55↑ (参考值 <40)\nTBil 32.5↑ (参考值 <21)\nALB 28↓ (参考值 35-55)\nPT 15.2s↑ (参考值 10-14)', time:'09:20' },
+      { type:'ai', text:'<div class="ai-conclusion">转氨酶轻度升高、白蛋白降低、凝血异常，符合肝硬化失代偿期。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• ALB 28↓，需补充白蛋白<br>• PT 15.2s↑，凝血功能异常<br>• 腹水可能加重</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 加强利尿剂治疗<br>② 补充白蛋白<br>③ 复查腹水超声评估量变</div></div>', time:'09:23', actions:true },
+    ],
+    record: `<div class="section-title">病程记录</div>\n\n患者：王德福，男，58岁，15床\n日期：2026-05-27\n\n<div class="section-title">今日病情</div>\n酒精性肝硬化Child-Pugh B级，腹水存在。\n\n<div class="section-title">辅助检查</div>\n• ALT 68 U/L↑\n• TBil 32.5 μmol/L↑\n• ALB 28 g/L↓\n• PT 15.2s↑\n\n<div class="section-title">诊疗计划</div>\n1. 限钠利尿\n2. 补充白蛋白\n3. 监测腹水变化`,
+    orders: [
+      { name: '呋塞米 20mg qd', detail: '利尿治疗' },
+      { name: '螺内酯 100mg qd', detail: '保钾利尿' },
+      { name: '人血白蛋白 10g', detail: '静脉补充' },
+      { name: '腹水超声', detail: '评估量变' },
+    ],
+    consult: [
+      { dept: '消化科', content: 'Child-Pugh B级，限钠利尿，补充白蛋白。' },
+      { dept: '药学部', content: '注意利尿剂剂量，避免过度利尿致肝性脑病。' },
+    ],
+    trends: { wbc: [3.8,4.0,3.9,4.2,4.1,4.3,4.0], crp: [2,3,2,4,3,5,4], neut: [52,50,51,53,52,54,51] }
+  },
+  {
+    id: 'p4', name: '赵淑华', sex: '女', age: 70, bed: '6床',
+    admission: 'ZY20260525041', dx: '慢性心衰急性加重',
+    status: 'online', unread: 0, statusText: '在线',
+    group: 'pre-op', surgeryType: '待评估',
+    initialMsgs: [
+      { type:'doctor', text:'赵淑华慢性心衰急性加重，下肢水肿加重3天，请AI评估。', time:'10:45' },
+      { type:'ai', text:'<div class="ai-conclusion">70岁女性，慢性心衰急性失代偿，下肢水肿加重。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 需警惕肺水肿<br>• 建议BNP/NT-proBNP检测</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① BNP/NT-proBNP检测<br>② 胸部X光排查肺水肿<br>③ 调整利尿剂<br>④ 监测体重</div></div>', time:'10:48' },
+    ],
+    pushSequence: [
+      { type:'lab', text:'BNP 1250↑↑ (参考值 <100)\nNT-proBNP 8500↑↑ (参考值 <900)\n体重较入院增加2.3kg\n下肢水肿(++)', time:'13:00' },
+      { type:'ai', text:'<div class="ai-conclusion">BNP和NT-proBNP显著升高，提示心衰失代偿。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• BNP 1250↑↑，心衰指标显著升高<br>• 体重增加2.3kg，对应液体潴留<br>• 下肢水肿(++)</div></div><div class="ai-risk">⚠️ 需警惕急性肺水肿发生！</div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 加强利尿（静脉呋塞米）<br>② 严格限钠限水<br>③ 每日监测体重<br>④ 评估是否需要正性肌力药物</div></div>', time:'13:03', actions:true, isRisk:true },
+    ],
+    record: `<div class="section-title">病程记录</div>\n\n患者：赵淑华，女，70岁，6床\n日期：2026-05-27\n\n<div class="section-title">今日病情</div>\n慢性心衰急性加重，下肢水肿加重3天。\n\n<div class="section-title">辅助检查</div>\n• BNP 1250 pg/mL↑↑\n• NT-proBNP 8500 pg/mL↑↑\n• 体重增加2.3kg\n• 下肢水肿(++)\n\n<div class="section-title">诊疗计划</div>\n1. 静脉呋塞米加强利尿\n2. 严格限钠限水\n3. 监测肺水肿风险`,
+    orders: [
+      { name: '呋塞米 40mg iv', detail: '静脉加强利尿' },
+      { name: '硝酸甘油泵入', detail: '减轻心脏负荷' },
+      { name: '胸部X光', detail: '排查肺水肿' },
+      { name: '体重监测 qd', detail: '评估液体潴留' },
+    ],
+    consult: [
+      { dept: '心内科', content: '急性心衰失代偿，静脉呋塞米+硝酸甘油。' },
+      { dept: '呼吸科', content: '警惕肺水肿，监测呼吸频率+SpO2。' },
+    ],
+    trends: { wbc: [5.0,5.2,5.1,5.3,5.2,5.4,5.1], crp: [3,4,3,5,4,6,5], neut: [55,54,56,53,55,54,55] }
+  },
+  {
+    id: 'p5', name: '刘长生', sex: '男', age: 80, bed: '22床',
+    admission: 'ZY20260524019', dx: 'COPD急性加重 | 前列腺增生',
+    status: 'has-msg', unread: 1, statusText: '有新消息',
+    group: 'post-op', surgeryType: '前列腺电切术后第5天',
+    initialMsgs: [
+      { type:'doctor', text:'刘长生COPD急性加重期入院，伴有排尿困难。请AI评估综合治疗方案。', time:'昨天 16:20' },
+      { type:'ai', text:'<div class="ai-conclusion">80岁男性，COPD急性加重(GOLD III) + 前列腺增生。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 需避免加重排尿困难的药物<br>• 需评估呼吸功能</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 支气管扩张剂+氧疗<br>② 评估是否需要无创通气<br>③ 前列腺增生药物调整<br>④ 监测血气分析</div></div>', time:'昨天 16:23' },
+    ],
+    pushSequence: [
+      { type:'nurse', text:'SpO2 88%↓ (参考值 ≥95%)\n呼吸频率 26次/分↑ (参考值 12-20)\nHR 102↑ (参考值 60-100)\nBP 145/85', time:'15:00' },
+      { type:'ai', text:'<div class="ai-conclusion">血氧饱和度降至88%，呼吸频率增快，提示COPD急性加重合并呼吸功能不全。</div><div class="ai-risk">⚠️ 需警惕Ⅱ型呼吸衰竭！</div><div class="ai-section"><div class="ai-section-title">紧急建议</div><div class="ai-section-content">① 立即给予氧疗（2-4L/min）<br>② 评估是否需要无创正压通气<br>③ 动脉血气分析<br>④ 加强支气管扩张剂治疗</div></div>', time:'15:03', actions:true, isRisk:true },
+      { type:'family', text:'刘长生说今晚排尿不太顺畅，尿量比平时少。麻烦医生看看。\n\n家属反馈时间: 14:40', time:'14:40' },
+      { type:'ai', text:'<div class="ai-conclusion">排尿困难需关注。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• COPD急性加重可导致缺氧加重前列腺充血<br>• 部分COPD药物可能影响排尿</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 检查膀胱残余尿量<br>② 必要时留置导尿<br>③ 调整前列腺增生药物<br>④ 监测肾功能</div></div>', time:'15:06', actions:true },
+    ],
+    record: `<div class="section-title">病程记录</div>\n\n患者：刘长生，男，80岁，22床\n日期：2026-05-27\n\n<div class="section-title">今日病情</div>\nCOPD急性加重(GOLD III)，伴排尿困难。\n\n<div class="section-title">辅助检查</div>\n• SpO2 88%↓\n• 呼吸频率 26次/分↑\n• HR 102次/分↑\n\n<div class="section-title">诊疗计划</div>\n1. 氧疗 + 支气管扩张剂\n2. 评估无创通气\n3. 处理排尿困难`,
+    orders: [
+      { name: '氧疗 2-4L/min', detail: '持续低流量吸氧' },
+      { name: '沙丁胺醇雾化 q6h', detail: '支气管扩张' },
+      { name: '动脉血气分析', detail: '评估呼吸功能' },
+      { name: '膀胱残余尿量', detail: '评估排尿困难' },
+      { name: '坦索罗辛 0.2mg qd', detail: '前列腺增生' },
+    ],
+    consult: [
+      { dept: '呼吸科', content: 'COPD急性加重，氧疗+支气管扩张剂，评估无创通气。' },
+      { dept: '泌尿外科', content: '排尿困难，检查残余尿量，必要时导尿。' },
+    ],
+    trends: { wbc: [6.5,7.2,8.0,9.5,10.8,11.5,12.0], crp: [5,8,15,28,38,45,52], neut: [58,62,68,74,78,82,84] }
+  }
+];
+
+let currentPatientId = 'p1';
+let pushTimers = [];
+let isPushing = false;
+let consultMode = false;
+let isAssistantMode = false;
+let isCollapsed = false;
+let isSimplified = false;
+let isRecording = false;
+let selectedDate = '';
+let searchQuery = '';
+let searchTimer = null;
+
+// 患者分组状态
+let groupStates = { preOp: true, postOp: true, historical: false };
+
+function renderPatientList() {
+  const list = document.getElementById('patientList');
+  list.innerHTML = '';
+  
+  // 按分组渲染
+  const groups = [
+    { key: 'preOp', title: '📋 术前患者', filter: p => p.group === 'pre-op' },
+    { key: 'postOp', title: '🩹 术后患者', filter: p => p.group === 'post-op' },
+    { key: 'historical', title: '📁 历史患者', filter: p => p.group === 'historical' },
+  ];
+  
+  groups.forEach(g => {
+    const groupPatients = patients.filter(g.filter);
+    if (groupPatients.length === 0) return;
+    
+    const expanded = groupStates[g.key] ? 'expanded' : '';
+    const hidden = groupStates[g.key] ? '' : 'hidden';
+    
+    let html = '<div class="patient-group">';
+    html += '<div class="group-header" onclick="toggleGroup(\'' + g.key + '\')">';
+    html += '<span class="group-arrow ' + expanded + '">▶</span>';
+    html += '<span class="group-title">' + g.title + '</span>';
+    html += '<span class="group-badge">' + groupPatients.length + '</span>';
+    html += '</div>';
+    html += '<div class="group-list ' + hidden + '" id="group-' + g.key + '">';
+    
+    groupPatients.forEach(p => {
+      const active = p.id === currentPatientId ? 'active' : '';
+      const dotClass = 'status-dot ' + p.status;
+      const badge = p.unread > 0 ? '<div class="badge-dot">' + p.unread + '</div>' : '';
+      const tagClass = p.group === 'pre-op' ? 'pre-op' : p.group === 'post-op' ? 'post-op' : 'historical';
+      const tagText = p.group === 'pre-op' ? '术前' : p.group === 'post-op' ? '术后' : '历史';
+      
+      html += '<div class="patient-item ' + active + '" data-id="' + p.id + '" onclick="switchPatient(\'' + p.id + '\')">'
+        + '<div class="' + dotClass + '"></div>'
+        + '<div class="pi-info"><div class="pi-name">' + p.name + '<span class="patient-tag ' + tagClass + '">' + tagText + '</span></div>'
+        + '<div class="pi-bed">' + p.bed + ' · ' + (p.surgeryType || p.sex + p.age + '岁') + '</div></div>'
+        + badge + '</div>';
+    });
+    
+    html += '</div></div>';
+    list.innerHTML += html;
+  });
+  
+  // 折叠选择器
+  const sel = document.getElementById('collapseSelect');
+  sel.innerHTML = '<option value="">选择患者...</option>';
+  patients.forEach(p => {
+    sel.innerHTML += '<option value="' + p.id + '">' + p.name + ' | ' + p.bed + '</option>';
+  });
+}
+
+function toggleGroup(key) {
+  groupStates[key] = !groupStates[key];
+  const groupEl = document.getElementById('group-' + key);
+  if (groupEl) {
+    groupEl.classList.toggle('hidden');
+  }
+  // 更新箭头
+  const groupHeader = groupEl?.previousElementSibling;
+  if (groupHeader) {
+    const arrow = groupHeader.querySelector('.group-arrow');
+    if (arrow) arrow.classList.toggle('expanded');
+  }
+}
+
+function renderDropdown() {
+  const container = document.getElementById('dropdownItems');
+  container.innerHTML = '';
+  patients.forEach(p => {
+    container.innerHTML += '<div class="dropdown-item" onclick="selectPatientDropdown(\'' + p.id + '\')">'
+      + '<div><span class="dd-name">' + p.name + '</span><span class="dd-dx"> ' + p.dx.split('|')[0].trim() + '</span></div>'
+      + '<span class="dd-bed">' + p.bed + '</span></div>';
+  });
+}
+
+function filterDropdown(val) {
+  const items = document.querySelectorAll('.dropdown-item');
+  items.forEach(item => {
+    const name = (item.querySelector('.dd-name') && item.querySelector('.dd-name').textContent) || '';
+    item.style.display = name.indexOf(val) > -1 ? 'flex' : 'none';
+  });
+}
+
+function toggleDropdown() {
+  const list = document.getElementById('dropdownList');
+  list.classList.toggle('open');
+  if (list.classList.contains('open')) {
+    document.getElementById('searchInput').value = '';
+    filterDropdown('');
+    document.getElementById('searchInput').focus();
+  }
+}
+
+function selectPatientDropdown(id) {
+  document.getElementById('dropdownList').classList.remove('open');
+  switchPatient(id);
+}
+
+function switchFromCollapse(id) {
+  if (id) switchPatient(id);
+}
+
+function switchPatient(id) {
+  if (id === currentPatientId && !isAssistantMode) return;
+  isAssistantMode = false;
+  clearPushTimers();
+  currentPatientId = id;
+  const p = patients.find(x => x.id === id);
+  p.unread = 0;
+  document.getElementById('selectedPatientName').textContent = p.name + ' | ' + p.bed;
+  document.getElementById('chName').textContent = p.name;
+  document.getElementById('chName').className = 'ch-name';
+  document.getElementById('chDx').textContent = p.dx;
+  document.getElementById('chDx').style.display = '';
+  document.getElementById('chMeta').textContent = '住院号: ' + p.admission + ' | ' + p.bed;
+  document.getElementById('chMeta').style.display = '';
+  document.getElementById('chatHeader').className = 'chat-header';
+  document.getElementById('inputArea').className = 'input-area';
+  document.getElementById('msgInput').className = '';
+  document.getElementById('msgInput').placeholder = '输入消息...';
+  document.querySelector('.send-btn').className = 'send-btn';
+  document.getElementById('quickBar').innerHTML = '<button class="quick-btn" onclick="showRecordModal()">生成病历</button><button class="quick-btn" onclick="showOrderModal()">开单建议</button><button class="quick-btn" onclick="quickAction(\'综合研判\')">综合研判</button><button class="quick-btn" onclick="triggerConsult()">会诊</button><button class="quick-btn" onclick="openTrendModal()">查看趋势</button><button class="quick-btn" onclick="showHandoverModal()">交班摘要</button><button class="quick-btn" onclick="showDRGModal()">DRG分析</button>';
+  renderPatientList();
+  loadMessages(p);
+}
+
+function switchToAssistant() {
+  isAssistantMode = true;
+  clearPushTimers();
+  document.getElementById('chName').textContent = '智能助手';
+  document.getElementById('chName').className = 'ch-name assistant-name';
+  document.getElementById('chDx').style.display = 'none';
+  document.getElementById('chMeta').style.display = 'none';
+  document.getElementById('chatHeader').className = 'chat-header assistant-header';
+  document.getElementById('inputArea').className = 'input-area assistant-input';
+  document.getElementById('msgInput').className = 'assistant-input-field';
+  document.getElementById('msgInput').placeholder = '输入任何医学问题...';
+  document.querySelector('.send-btn').className = 'send-btn assistant-send';
+  document.getElementById('quickBar').innerHTML = '<button class="quick-btn" onclick="assistantAction(\'医学知识\')">医学知识</button><button class="quick-btn" onclick="assistantAction(\'指南查询\')">指南查询</button><button class="quick-btn" onclick="assistantAction(\'方案讨论\')">方案讨论</button><button class="quick-btn" onclick="assistantAction(\'患者管理\')">患者管理</button>';
+  const area = document.getElementById('messagesArea');
+  area.innerHTML = '<div class="date-divider">── 智能助手 ──</div>' +
+    '<div class="message msg-right type-ai">' +
+    '<div class="msg-avatar" style="background:linear-gradient(135deg,#059669,#10b981);"><iconify-icon icon="mdi:brain" style="font-size:16px;color:#fff;"></iconify-icon></div>' +
+    '<div><div class="bubble">' +
+    '<div class="bubble-label" style="color:#059669;text-align:right;">智能助手</div>' +
+    '您好！我是您的智能助手。可以问我任何医学问题，比如：<br><br>' +
+    '• 某类疾病的诊疗方案<br>' +
+    '• 最新指南更新<br>' +
+    '• 药物相互作用<br>' +
+    '• 患者管理建议<br><br>' +
+    '请随时提问！</div>' +
+    '<span class="msg-time">00:00</span></div></div>';
+}
+
+function loadMessages(p) {
+  const area = document.getElementById('messagesArea');
+  area.innerHTML = '<div class="date-divider">── 5月27日 ──</div>';
+  // 按时间块组织消息
+  let currentBlock = null;
+  let blockMessages = [];
+  
+  function flushBlock() {
+    if (blockMessages.length > 0) {
+      const timeRange = blockMessages[0].time + ' - ' + blockMessages[blockMessages.length-1].time;
+      const blockId = 'block_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+      area.innerHTML += '<div class="time-block" id="' + blockId + '">' +
+        '<div class="time-block-header" onclick="toggleTimeBlock(\'' + blockId + '\')">' +
+        '<span class="tb-arrow">▼</span>' + timeRange + ' (' + blockMessages.length + '条)' +
+        '</div><div class="time-block-body">';
+      blockMessages.forEach(m => { area.innerHTML += renderMsgHTML(m); });
+      area.innerHTML += '</div></div>';
+      blockMessages = [];
+    }
+  }
+  
+  p.initialMsgs.forEach(m => {
+    if (currentBlock && m.time !== currentBlock) {
+      flushBlock();
+    }
+    currentBlock = m.time;
+    blockMessages.push(m);
+  });
+  flushBlock();
+  
+  setTimeout(() => startPushSequence(p), 500);
+}
+
+function renderMsgHTML(m) {
+  let align = 'msg-left', typeClass = '', avatarHtml = '', bubbleInner = '';
+
+  if (m.type === 'ai') {
+    align = 'msg-right'; typeClass = 'type-ai';
+    avatarHtml = '<div class="msg-avatar"><iconify-icon icon="mdi:robot-happy" style="font-size:16px;color:#fff;"></iconify-icon></div>';
+    const actionsHtml = m.actions ? '<div class="bubble-actions">'
+      + '<button class="bubble-btn" onclick="confirmAction(this)">确认执行</button>'
+      + '<button class="bubble-btn" onclick="modifyAction()">修改方案</button>'
+      + '<button class="bubble-btn" onclick="askAction()">追问</button>'
+      + '<button class="bubble-btn primary" onclick="showOrderModal()">开单建议</button></div>' : '';
+    bubbleInner = '<div class="bubble-label" style="text-align:right">AI助手</div>' + m.text + actionsHtml;
+  } else if (m.type === 'doctor') {
+    align = 'msg-right'; typeClass = 'type-doctor';
+    avatarHtml = '<div class="msg-avatar"><iconify-icon icon="mdi:doctor" style="font-size:16px;color:#fff;"></iconify-icon></div>';
+    bubbleInner = '<div class="bubble-label" style="text-align:right">我</div>' + m.text;
+  } else if (m.type === 'lab') {
+    align = 'msg-left'; typeClass = 'type-lab';
+    avatarHtml = '<div class="msg-avatar"><iconify-icon icon="mdi:microscope" style="font-size:16px;color:#fff;"></iconify-icon></div>';
+    bubbleInner = '<div class="bubble-label">检验科</div>' + m.text;
+  } else if (m.type === 'nurse') {
+    align = 'msg-left'; typeClass = 'type-nurse';
+    avatarHtml = '<div class="msg-avatar"><iconify-icon icon="mdi:stethoscope" style="font-size:16px;color:#fff;"></iconify-icon></div>';
+    bubbleInner = '<div class="bubble-label">护士体征</div>' + m.text;
+  } else if (m.type === 'family') {
+    align = 'msg-left'; typeClass = 'type-family';
+    avatarHtml = '<div class="msg-avatar"><iconify-icon icon="mdi:account" style="font-size:16px;color:#fff;"></iconify-icon></div>';
+    bubbleInner = '<div class="bubble-label">患者家属</div>' + m.text;
+  } else if (m.type === 'imaging') {
+    align = 'msg-left'; typeClass = 'type-imaging';
+    avatarHtml = '<div class="msg-avatar"><iconify-icon icon="mdi:monitor-heart" style="font-size:16px;color:#fff;"></iconify-icon></div>';
+    bubbleInner = '<div class="bubble-label">影像科</div>' + m.text;
+  } else if (m.type === 'consult') {
+    align = 'msg-right'; typeClass = 'type-consult';
+    avatarHtml = '<div class="msg-avatar"><iconify-icon icon="mdi:account-group" style="font-size:16px;color:#fff;"></iconify-icon></div>';
+    bubbleInner = '<div class="bubble-label" style="text-align:right">多学科联合会诊</div>' + m.text;
+  }
+
+  const riskClass = m.isRisk ? 'risk-alert' : '';
+  return '<div class="message ' + align + ' ' + typeClass + ' ' + riskClass + '">' +
+    avatarHtml + '<div class="bubble">' + bubbleInner + '</div><span class="msg-time">' + m.time + '</span></div>';
+}
+
+function confirmAction(btn) { btn.textContent = '已确认'; btn.className = 'bubble-btn confirmed'; }
+function modifyAction() { document.getElementById('msgInput').value = '修改建议：'; document.getElementById('msgInput').focus(); }
+function askAction() { document.getElementById('msgInput').value = '追问：'; document.getElementById('msgInput').focus(); }
+
+function startPushSequence(p) {
+  clearPushTimers();
+  isPushing = true;
+  let idx = 0;
+  function pushNext() {
+    if (idx >= p.pushSequence.length) { isPushing = false; return; }
+    const m = p.pushSequence[idx];
+    document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML(m));
+    idx++;
+    const delay = (m.type === 'ai' || m.type === 'lab' || m.type === 'nurse') ? 2500 : 2000;
+    pushTimers.push(setTimeout(pushNext, delay));
+  }
+  pushTimers.push(setTimeout(pushNext, 2000));
+}
+
+function clearPushTimers() {
+  for (let i = 0; i < pushTimers.length; i++) clearTimeout(pushTimers[i]);
+  pushTimers = [];
+  isPushing = false;
+}
+
+function toggleTimeBlock(blockId) {
+  const block = document.getElementById(blockId);
+  if (!block) return;
+  const header = block.querySelector('.time-block-header');
+  const body = block.querySelector('.time-block-body');
+  header.classList.toggle('collapsed');
+  body.classList.toggle('hidden');
+}
+
+function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const now = new Date();
+  const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes());
+
+  if (isAssistantMode) {
+    document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'doctor', text, time:timeStr }));
+    input.value = ''; autoResize(input);
+    setTimeout(() => {
+      const t2 = pad(new Date().getHours()) + ':' + pad(new Date().getMinutes());
+      document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'ai', text:'<div class="ai-conclusion">收到您的问题。</div><div class="ai-section"><div class="ai-section-title">分析</div><div class="ai-section-content">作为智能助手，我可以提供医学知识、指南查询、方案讨论等服务。请详细描述您的问题，我会结合最新循证医学证据给出分析建议。</div></div>', time:t2, actions:true }));
+    }, 1000);
+    return;
+  }
+
+  const p = patients.find(x => x.id === currentPatientId);
+  document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'doctor', text, time:timeStr }));
+  input.value = ''; autoResize(input);
+  setTimeout(() => {
+    const t2 = pad(new Date().getHours()) + ':' + pad(new Date().getMinutes());
+    document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'ai', text:'<div class="ai-conclusion">已收到您的指示，正在分析处理中。</div><div class="ai-section"><div class="ai-section-title">分析</div><div class="ai-section-content">我会结合患者最新检验结果、体征数据和病史信息，给出综合分析建议。请您继续追问或等待完整分析。</div></div>', time:t2, actions:true }));
+  }, 1200);
+}
+
+function pad(n) { return n < 10 ? '0'+n : ''+n; }
+function onInputKeydown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
+function autoResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 100) + 'px'; }
+
+function quickAction(type) {
+  const p = patients.find(x => x.id === currentPatientId);
+  const now = new Date();
+  const t = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'doctor', text:'请' + type, time:t }));
+  setTimeout(() => {
+    const t2 = pad(new Date().getHours()) + ':' + pad(new Date().getMinutes());
+    document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'ai', text:'<div class="ai-conclusion">' + p.name + '综合研判完成。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 当前病情稳定，建议继续当前治疗方案<br>• 关注感染指标变化趋势<br>• 血压控制需加强</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 继续当前治疗方案<br>② 48小时后复查相关指标<br>③ 如有变化及时调整</div></div>', time:t2, actions:true }));
+  }, 1000);
+}
+
+function assistantAction(type) {
+  const now = new Date();
+  const t = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'doctor', text:type, time:t }));
+  setTimeout(() => {
+    const t2 = pad(new Date().getHours()) + ':' + pad(new Date().getMinutes());
+    const replies = {
+      '医学知识': '<div class="ai-conclusion">医学知识查询</div><div class="ai-section"><div class="ai-section-title">说明</div><div class="ai-section-content">请问您想了解哪类医学知识？我可以提供疾病诊疗、药物使用、检查解读等内容。</div></div>',
+      '指南查询': '<div class="ai-conclusion">指南查询</div><div class="ai-section"><div class="ai-section-title">说明</div><div class="ai-section-content">请问您想查询哪个疾病的最新指南？我可以提供国内外权威指南推荐。</div></div>',
+      '方案讨论': '<div class="ai-conclusion">方案讨论</div><div class="ai-section"><div class="ai-section-title">说明</div><div class="ai-section-content">请描述您想讨论的临床方案，我会从循证医学角度给出分析建议。</div></div>',
+      '患者管理': '<div class="ai-conclusion">患者管理</div><div class="ai-section"><div class="ai-section-title">说明</div><div class="ai-section-content">请问您想了解哪类患者的管理建议？比如高龄患者、多合并症患者等。</div></div>',
+    };
+    document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'ai', text: replies[type] || '请问有什么可以帮您的？', time:t2, actions:true }));
+  }, 800);
+}
+
+function showRecordModal() {
+  const p = patients.find(x => x.id === currentPatientId);
+  document.getElementById('recordContent').innerHTML = p.record;
+  document.getElementById('recordModal').classList.add('open');
+}
+
+function showOrderModal() {
+  const p = patients.find(x => x.id === currentPatientId);
+  let html = '';
+  p.orders.forEach(o => {
+    html += '<div class="order-item"><div class="order-name">' + o.name + '</div><div class="order-detail">' + o.detail + '</div></div>';
+  });
+  document.getElementById('orderContent').innerHTML = html;
+  document.getElementById('orderModal').classList.add('open');
+}
+
+function triggerConsult() {
+  const p = patients.find(x => x.id === currentPatientId);
+  const now = new Date();
+  const t = pad(now.getHours()) + ':' + pad(now.getMinutes());
+  let consultText = '**多学科联合会诊意见**\n\n';
+  p.consult.forEach(c => {
+    consultText += c.dept + '：' + c.content + '\n\n';
+  });
+  document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'consult', text:consultText, time:t, actions:true }));
+  let detailHtml = '';
+  p.consult.forEach(c => {
+    detailHtml += '<div class="consult-content"><div class="consult-dept">' + c.dept + '</div>' + c.content + '</div>';
+  });
+  document.getElementById('consultContent').innerHTML = detailHtml;
+  document.getElementById('consultModal').classList.add('open');
+}
+
+function openTrendModal() {
+  document.getElementById('trendModal').classList.add('open');
+  setTimeout(() => {
+    const chartDom = document.getElementById('trendChart');
+    if (!chartDom._echarts) {
+      const chart = echarts.init(chartDom);
+      chartDom._echarts = chart;
+      const p = patients.find(x => x.id === currentPatientId);
+      chart.setOption({
+        tooltip: { trigger:'axis' },
+        legend: { data:['WBC','CRP','NEUT%'], bottom:0, textStyle:{fontSize:10} },
+        grid: { left:40, right:20, top:20, bottom:40 },
+        xAxis: { type:'category', data:['5/21','5/22','5/23','5/24','5/25','5/26','5/27'], axisLabel:{fontSize:10} },
+        yAxis: [
+          { type:'value', name:'WBC/NEUT%', nameTextStyle:{fontSize:9}, axisLabel:{fontSize:9} },
+          { type:'value', name:'CRP', nameTextStyle:{fontSize:9}, axisLabel:{fontSize:9}, splitLine:{show:false} }
+        ],
+        series: [
+          { name:'WBC', type:'line', data:p.trends.wbc, yAxisIndex:0, smooth:true, lineStyle:{color:'#3b82f6'} },
+          { name:'CRP', type:'line', yAxisIndex:1, data:p.trends.crp, smooth:true, lineStyle:{color:'#dc2626'} },
+          { name:'NEUT%', type:'line', data:p.trends.neut, smooth:true, lineStyle:{color:'#f59e0b'} },
+        ]
+      });
+    }
+  }, 100);
+}
+
+function showHandoverModal() {
+  const p = patients.find(x => x.id === currentPatientId);
+  let html = '<div class="section-title">交班摘要 - ' + p.name + ' | ' + p.bed + '</div>';
+  html += '<div class="section-title">当前诊断</div>' + p.dx;
+  html += '<div class="section-title">今日关键变化</div>';
+  p.pushSequence.forEach(m => {
+    if (m.type === 'lab' || m.type === 'nurse' || m.type === 'ai') {
+      html += '• [' + m.time + '] ' + (m.text || '').replace(/\n/g, ' ').replace(/\*\*/g, '').substr(0, 80) + '...<br>';
+    }
+  });
+  html += '<div class="section-title">待办事项</div>';
+  html += '• 关注检验结果复查<br>• 监测体征变化<br>• 必要时调整治疗方案';
+  document.getElementById('handoverContent').innerHTML = html;
+  document.getElementById('handoverModal').classList.add('open');
+}
+
+function showDRGModal() {
+  const p = patients.find(x => x.id === currentPatientId);
+  let html = '<div class="section-title">DRG/DIP 分析 - ' + p.name + '</div>';
+  html += '<div class="section-title">分组信息</div>';
+  html += '• DRG分组：急性脑梗死（M13）<br>';
+  html += '• 权重：1.85<br>';
+  html += '• 预计费用：¥28,500<br>';
+  html += '<div class="section-title">费用进度</div>';
+  html += '• 已用费用：¥12,300 (43%)<br>';
+  html += '• 剩余额度：¥16,200<br>';
+  html += '• 预计超支风险：低<br>';
+  html += '<div class="section-title">建议</div>';
+  html += '• 当前治疗方案在医保额度内<br>';
+  html += '• 注意控制抗生素使用天数<br>';
+  html += '• 建议48小时后评估溶栓效果，尽早康复';
+  document.getElementById('drgContent').innerHTML = html;
+  document.getElementById('drgModal').classList.add('open');
+}
+
+function showAssistantSetting() { document.getElementById('assistantSettingModal').classList.add('open'); }
+function showUploadModal() { document.getElementById('uploadModal').classList.add('open'); }
+
+function closeTrendModal() { document.getElementById('trendModal').classList.remove('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function submitRecord() { closeModal('recordModal'); alert('病历已提交至HIS系统'); }
+function editRecord() { closeModal('recordModal'); document.getElementById('msgInput').value = '请修改病历：'; document.getElementById('msgInput').focus(); }
+function submitOrder() { closeModal('orderModal'); alert('检查/医嘱已提交至HIS系统'); }
+function editOrder() { closeModal('orderModal'); document.getElementById('msgInput').value = '请修改开单建议：'; document.getElementById('msgInput').focus(); }
+function submitConsult() { closeModal('consultModal'); alert('会诊意见已确认执行'); }
+function saveSetting() { closeModal('assistantSettingModal'); alert('设置已保存'); }
+function exportHandover() { alert('交班摘要已导出'); closeModal('handoverModal'); }
+function submitHandover() { closeModal('handoverModal'); alert('交班摘要已发送至接班医生'); }
+
+function toggleUploadMenu() { document.getElementById('uploadMenu').classList.toggle('open'); }
+function uploadAction(type) {
+  document.getElementById('uploadMenu').classList.remove('open');
+  const names = { photo:'拍照上传', image:'上传图片', voice:'语音输入', text:'文字输入', file:'文件导入' };
+  alert(names[type] + '功能开发中...');
+}
+
+function toggleRecording() {
+  const btn = document.getElementById('recordBtn');
+  isRecording = !isRecording;
+  if (isRecording) {
+    btn.classList.add('recording');
+    btn.title = '录音中...点击停止';
+    alert('录音已开始（模拟）\n\n查房模式：持续录音，自动转文字\n\n点击麦克风按钮停止');
+  } else {
+    btn.classList.remove('recording');
+    btn.title = '语音输入/查房模式';
+    const now = new Date();
+    const timeStr = pad(now.getHours()) + ':' + pad(now.getMinutes());
+    document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'doctor', text:'【语音转文字】患者今日精神状态良好，咳嗽减少，痰量减少。继续观察。', time:timeStr }));
+    setTimeout(() => {
+      const t2 = pad(new Date().getHours()) + ':' + pad(new Date().getMinutes());
+      document.getElementById('messagesArea').insertAdjacentHTML('beforeend', renderMsgHTML({ type:'ai', text:'<div class="ai-conclusion">已记录查房语音。</div><div class="ai-section"><div class="ai-section-title">分析</div><div class="ai-section-content">患者症状改善，建议继续当前治疗方案。48小时后复查相关指标。</div></div>', time:t2, actions:true }));
+    }, 800);
+  }
+}
+
+function toggleCollapse() {
+  isCollapsed = !isCollapsed;
+  const panel = document.getElementById('leftPanel');
+  const selector = document.getElementById('collapseSelector');
+  const btn = document.getElementById('collapseBtn');
+  if (isCollapsed) {
+    panel.classList.add('collapsed');
+    selector.classList.add('show');
+    btn.textContent = '展开';
+    document.getElementById('appWindow').classList.add('collapsed');
+  } else {
+    panel.classList.remove('collapsed');
+    selector.classList.remove('show');
+    btn.textContent = '折叠';
+    document.getElementById('appWindow').classList.remove('collapsed');
+  }
+}
+
+function toggleSimplified() {
+  // 已移除简化模式
+}
+
+function onStyleChange(val) {
+  console.log('决策风格切换为：' + val);
+}
+
+function minimizeWindow() {
+  const w = document.getElementById('appWindow');
+  w.style.transform = 'translateY(100vh)'; w.style.opacity = '0'; w.style.transition = 'all 0.3s';
+  setTimeout(() => { w.style.transform = ''; w.style.opacity = '1'; w.style.transition = ''; }, 2000);
+}
+
+function maximizeWindow() {
+  const w = document.getElementById('appWindow');
+  if (w.style.width === '100vw' && w.style.height === '100vh') {
+    w.style.width = '1200px'; w.style.height = '780px'; w.style.borderRadius = '10px';
+  } else {
+    w.style.width = '100vw'; w.style.height = '100vh'; w.style.borderRadius = '0';
+  }
+}
+
+function closeWindow() { document.getElementById('confirmModal').classList.add('open'); }
+function doExit() { document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;background:#1a1a2e;color:#94a3b8;font-size:16px;">已退出住院医生AI助手系统</div>'; }
+
+function triggerShake() {
+  const bar = document.getElementById('titleBar');
+  bar.classList.add('shake');
+  setTimeout(() => bar.classList.remove('shake'), 3000);
+}
+
+function toggleWebSearch(el) { el.classList.toggle('active'); }
+function toggleConsultMode(el) {
+  el.classList.toggle('active');
+  consultMode = el.classList.contains('active');
+}
+function refreshSession() {
+  clearPushTimers();
+  const p = patients.find(x => x.id === currentPatientId);
+  loadMessages(p);
+}
+
+// 日期过滤
+function filterByDate(dateStr) {
+  selectedDate = dateStr;
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  
+  const area = document.getElementById('messagesArea');
+  area.innerHTML = '';
+  
+  if (!dateStr) {
+    // 无日期选择，显示全部
+    loadMessages(p);
+    return;
+  }
+  
+  // 按日期过滤消息
+  area.innerHTML = '<div class="date-divider">── ' + dateStr + ' ──</div>';
+  
+  const allMsgs = [...p.initialMsgs, ...p.pushSequence];
+  const filtered = allMsgs.filter(m => {
+    if (!m.time) return false;
+    return m.time.includes(dateStr) || m.time.includes(dateStr.slice(2));
+  });
+  
+  if (filtered.length === 0) {
+    area.innerHTML += '<div style="text-align:center;padding:40px;color:#94a3b8;font-size:12px;">该日期暂无记录</div>';
+    return;
+  }
+  
+  filtered.forEach(m => {
+    area.innerHTML += renderMsgHTML(m);
+  });
+}
+
+// 搜索
+function debounceSearch(val) {
+  clearTimeout(searchTimer);
+  searchQuery = val.trim();
+  if (!searchQuery) {
+    document.getElementById('searchResults').classList.remove('open');
+    return;
+  }
+  searchTimer = setTimeout(() => performSearch(), 300);
+}
+
+function performSearch() {
+  const p = patients.find(x => x.id === currentPatientId);
+  if (!p) return;
+  
+  const allMsgs = [...p.initialMsgs, ...p.pushSequence];
+  const results = [];
+  const q = searchQuery.toLowerCase();
+  
+  allMsgs.forEach(m => {
+    const text = (m.text || '').toLowerCase();
+    if (text.includes(q)) {
+      // 提取上下文
+      const idx = text.indexOf(q);
+      const start = Math.max(0, idx - 20);
+      const end = Math.min((m.text || '').length, idx + q.length + 20);
+      const snippet = (m.text || '').substring(start, end);
+      
+      results.push({
+        time: m.time,
+        type: m.type,
+        snippet: (start > 0 ? '...' : '') + highlightText(snippet, searchQuery) + (end < (m.text || '').length ? '...' : ''),
+        fullText: m.text,
+      });
+    }
+  });
+  
+  const resultsEl = document.getElementById('searchResults');
+  const countEl = document.getElementById('searchCount');
+  const listEl = document.getElementById('searchResultsList');
+  
+  if (results.length === 0) {
+    countEl.textContent = '未找到匹配结果';
+    listEl.innerHTML = '';
+  } else {
+    countEl.textContent = '找到 ' + results.length + ' 条结果';
+    listEl.innerHTML = results.map(r => 
+      '<div class="search-result-item" onclick="scrollToMessage(\'' + r.time + '\')">' +
+      '<span class="sr-time">[' + r.time + ']</span> ' + r.snippet + '</div>'
+    ).join('');
+  }
+  
+  resultsEl.classList.add('open');
+}
+
+function highlightText(text, query) {
+  if (!query) return text;
+  const regex = new RegExp('(' + query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi');
+  return text.replace(regex, '<mark>$1</mark>');
+}
+
+function scrollToMessage(timeStr) {
+  const area = document.getElementById('messagesArea');
+  const msgs = area.querySelectorAll('.msg-time');
+  msgs.forEach(el => {
+    if (el.textContent === timeStr) {
+      el.closest('.message')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+}
+
+function clearSearch() {
+  document.getElementById('toolbarSearch').value = '';
+  searchQuery = '';
+  document.getElementById('searchResults').classList.remove('open');
+}
+
+function clearFilters() {
+  document.getElementById('toolbarDate').value = '';
+  document.getElementById('toolbarSearch').value = '';
+  selectedDate = '';
+  searchQuery = '';
+  document.getElementById('searchResults').classList.remove('open');
+  const p = patients.find(x => x.id === currentPatientId);
+  if (p) loadMessages(p);
+}
+
+// 初始化
+document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('click', (e) => {
+    const sel = document.querySelector('.patient-selector');
+    if (!sel.contains(e.target)) document.getElementById('dropdownList').classList.remove('open');
+    const uploadMenu = document.getElementById('uploadMenu');
+    const uploadBtn = document.querySelector('.upload-btn') || document.querySelector('.icon-btn[title="上传资料"]');
+    if (uploadMenu && uploadBtn && !uploadMenu.contains(e.target) && !uploadBtn.contains(e.target)) uploadMenu.classList.remove('open');
+  });
+  renderPatientList();
+  renderDropdown();
+  const p = patients.find(x => x.id === currentPatientId);
+  document.getElementById('selectedPatientName').textContent = p.name + ' | ' + p.bed;
+  document.getElementById('chName').textContent = p.name;
+  document.getElementById('chDx').textContent = p.dx;
+  document.getElementById('chMeta').textContent = '住院号: ' + p.admission + ' | ' + p.bed;
+  loadMessages(p);
+});
+</script>
+</body>
+</html>
