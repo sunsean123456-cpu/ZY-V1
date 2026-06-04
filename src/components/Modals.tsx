@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import ReactECharts from 'echarts-for-react';
+import { useAuthStore } from '../stores/authStore';
+import type { RichPatientData } from '../types';
 
 interface ModalProps {
   isOpen: boolean;
@@ -9,12 +12,8 @@ interface ModalProps {
 
 function Modal({ isOpen, onClose, title, children }: ModalProps) {
   if (!isOpen) return null;
-
   return (
-    <div 
-      className="modal-overlay open"
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
+    <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="modal-box">
         <button className="modal-close" onClick={onClose}>✕</button>
         <h3>{title}</h3>
@@ -24,60 +23,121 @@ function Modal({ isOpen, onClose, title, children }: ModalProps) {
   );
 }
 
-export function MedicalRecordModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+// ==================== Medical Record ====================
+export function MedicalRecordModal({ isOpen, onClose, patient }: {
+  isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
+}) {
+  if (!patient) return null;
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="住院病历预览">
-      <div className="record-preview">
-        <div className="section-title">入院记录</div>
-        <div>病历内容将在此显示...</div>
-      </div>
+      <div className="record-preview" dangerouslySetInnerHTML={{ __html: patient.record }} />
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>取消</button>
-        <button className="modal-btn">修改</button>
-        <button className="modal-btn primary">确认提交</button>
+        <button className="modal-btn" onClick={() => { onClose(); alert('请在对话框中输入修改意见'); }}>修改</button>
+        <button className="modal-btn primary" onClick={() => { onClose(); alert('病历已提交至HIS系统'); }}>确认提交</button>
       </div>
     </Modal>
   );
 }
 
-export function MedicalOrderModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+// ==================== Medical Order ====================
+export function MedicalOrderModal({ isOpen, onClose, patient }: {
+  isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
+}) {
+  const [checkedOrders, setCheckedOrders] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (isOpen && patient) {
+      setCheckedOrders(new Set(patient.orders.map((_, i) => i)));
+    }
+  }, [isOpen, patient]);
+
+  if (!patient) return null;
+
+  const toggleOrder = (idx: number) => {
+    setCheckedOrders(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="检查/医嘱建议">
       <div className="order-preview">
-        <div className="order-item">
-          <div className="order-name">医嘱项目</div>
-          <div className="order-detail">医嘱详情...</div>
-        </div>
+        {patient.orders.map((o, i) => (
+          <div key={i} className="order-item" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }} onClick={() => toggleOrder(i)}>
+            <input type="checkbox" checked={checkedOrders.has(i)} onChange={() => toggleOrder(i)} style={{ marginTop: 2 }} />
+            <div>
+              <div className="order-name">{o.name}</div>
+              <div className="order-detail">{o.detail}</div>
+            </div>
+          </div>
+        ))}
       </div>
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>取消</button>
-        <button className="modal-btn">修改</button>
-        <button className="modal-btn primary">确认提交</button>
+        <button className="modal-btn" onClick={() => { onClose(); alert('请在对话框中输入修改意见'); }}>修改</button>
+        <button className="modal-btn primary" onClick={() => { onClose(); alert(`已提交 ${checkedOrders.size} 条医嘱至HIS系统`); }}>确认提交</button>
       </div>
     </Modal>
   );
 }
 
-export function ConsultModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+// ==================== Consult ====================
+export function ConsultModal({ isOpen, onClose, patient }: {
+  isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
+}) {
+  if (!patient) return null;
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="多学科联合会诊意见">
       <div className="consult-detail">
-        <div className="consult-dept">会诊科室</div>
-        <div className="consult-content">会诊意见内容...</div>
+        {patient.consult.map((c, i) => (
+          <div key={i} className="consult-content">
+            <div className="consult-dept">{c.dept}</div>
+            {c.content}
+          </div>
+        ))}
       </div>
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>关闭</button>
-        <button className="modal-btn primary">确认执行</button>
+        <button className="modal-btn primary" onClick={() => { onClose(); alert('会诊意见已确认执行'); }}>确认执行</button>
       </div>
     </Modal>
   );
 }
 
-export function TrendModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+// ==================== Trend ====================
+export function TrendModal({ isOpen, onClose, patient }: {
+  isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
+}) {
+  if (!patient) return null;
+
+  const chartOption = {
+    tooltip: { trigger: 'axis' as const },
+    legend: { data: ['WBC', 'CRP', 'NEUT%'], bottom: 0, textStyle: { fontSize: 10 } },
+    grid: { left: 40, right: 20, top: 20, bottom: 40 },
+    xAxis: {
+      type: 'category' as const,
+      data: ['5/21', '5/22', '5/23', '5/24', '5/25', '5/26', '5/27'],
+      axisLabel: { fontSize: 10 },
+    },
+    yAxis: [
+      { type: 'value' as const, name: 'WBC/NEUT%', nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 } },
+      { type: 'value' as const, name: 'CRP', nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 }, splitLine: { show: false } },
+    ],
+    series: [
+      { name: 'WBC', type: 'line', data: patient.trends.wbc, yAxisIndex: 0, smooth: true, lineStyle: { color: '#3b82f6' } },
+      { name: 'CRP', type: 'line', data: patient.trends.crp, yAxisIndex: 1, smooth: true, lineStyle: { color: '#dc2626' } },
+      { name: 'NEUT%', type: 'line', data: patient.trends.neut, yAxisIndex: 0, smooth: true, lineStyle: { color: '#f59e0b' } },
+    ],
+  };
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="检验指标趋势图">
-      <div className="trend-chart" style={{ height: 260, background: '#f8fafc', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
-        趋势图表将在此显示
+      <div className="trend-chart">
+        <ReactECharts option={chartOption} style={{ height: 260 }} />
       </div>
       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
         近7日 WBC / CRP / NEUT% 变化趋势
@@ -86,27 +146,67 @@ export function TrendModal({ isOpen, onClose }: { isOpen: boolean; onClose: () =
   );
 }
 
-export function HandoverModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+// ==================== Handover ====================
+export function HandoverModal({ isOpen, onClose, patient }: {
+  isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
+}) {
+  if (!patient) return null;
+
+  const handoverHtml = (() => {
+    let html = `<div class="section-title">交班摘要 - ${patient.name} | ${patient.bed}</div>`;
+    html += `<div class="section-title">当前诊断</div>${patient.dx}`;
+    html += '<div class="section-title">今日关键变化</div>';
+    patient.pushSequence.forEach(m => {
+      if (m.type === 'lab' || m.type === 'nurse' || m.type === 'ai') {
+        const cleanText = (m.text || '').replace(/\n/g, ' ').replace(/<[^>]*>/g, '').substring(0, 80);
+        html += `• [${m.time}] ${cleanText}...<br>`;
+      }
+    });
+    html += '<div class="section-title">待办事项</div>';
+    html += '• 关注检验结果复查<br>• 监测体征变化<br>• 必要时调整治疗方案';
+    return html;
+  })();
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="交班摘要">
-      <div className="record-preview">
-        <div>交班摘要内容将在此显示...</div>
-      </div>
+      <div className="record-preview" dangerouslySetInnerHTML={{ __html: handoverHtml }} />
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>关闭</button>
-        <button className="modal-btn">导出</button>
-        <button className="modal-btn primary">确认发送</button>
+        <button className="modal-btn" onClick={() => { alert('交班摘要已导出'); onClose(); }}>导出</button>
+        <button className="modal-btn primary" onClick={() => { alert('交班摘要已发送至接班医生'); onClose(); }}>确认发送</button>
       </div>
     </Modal>
   );
 }
 
-export function DRGModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+// ==================== DRG ====================
+export function DRGModal({ isOpen, onClose, patient }: {
+  isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
+}) {
+  if (!patient) return null;
+
+  const drg = patient.drg;
+  const drgHtml = (() => {
+    let html = `<div class="section-title">DRG/DIP 分析 - ${patient.name}</div>`;
+    html += '<div class="section-title">分组信息</div>';
+    html += `• DRG分组：${drg?.group || '未分组'}<br>`;
+    html += `• 权重：${drg?.weight || 0}<br>`;
+    html += `• 预计费用：¥${(drg?.estimatedCost || 0).toLocaleString()}<br>`;
+    html += '<div class="section-title">费用进度</div>';
+    const pct = drg ? Math.round((drg.usedCost / drg.estimatedCost) * 100) : 0;
+    html += `• 已用费用：¥${(drg?.usedCost || 0).toLocaleString()} (${pct}%)<br>`;
+    html += `• 剩余额度：¥${((drg?.estimatedCost || 0) - (drg?.usedCost || 0)).toLocaleString()}<br>`;
+    html += `• 预计超支风险：${drg?.risk || '未知'}<br>`;
+    html += '<div class="section-title">建议</div>';
+    (drg?.suggestions || []).forEach(s => {
+      html += `• ${s}<br>`;
+    });
+    return html;
+  })();
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="DRG/DIP 分析">
-      <div className="record-preview">
-        <div>DRG分析内容将在此显示...</div>
-      </div>
+      <div className="record-preview" dangerouslySetInnerHTML={{ __html: drgHtml }} />
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>关闭</button>
       </div>
@@ -114,6 +214,7 @@ export function DRGModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => 
   );
 }
 
+// ==================== Settings ====================
 export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="AI助手设置">
@@ -127,58 +228,161 @@ export function SettingsModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           <span className="setting-label">头像</span>
           <div className="setting-control">
             <div className="setting-opt selected">🤖</div>
-            <div className="setting-opt">👨‍⚕️</div>
-            <div className="setting-opt">🧠</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>👨‍⚕️</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>🧠</div>
           </div>
         </div>
       </div>
-      
       <div className="setting-group">
         <div className="setting-group-title">沟通风格</div>
         <div className="setting-row">
           <span className="setting-label">语气</span>
           <div className="setting-control">
             <div className="setting-opt selected">严谨</div>
-            <div className="setting-opt">温和</div>
-            <div className="setting-opt">简洁</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>温和</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>简洁</div>
+          </div>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">详细程度</span>
+          <div className="setting-control">
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>详细</div>
+            <div className="setting-opt selected">适中</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>精简</div>
+          </div>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">推送频率</span>
+          <div className="setting-control">
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>频繁</div>
+            <div className="setting-opt selected">适中</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>精简</div>
           </div>
         </div>
       </div>
-      
+      <div className="setting-group">
+        <div className="setting-group-title">决策偏好</div>
+        <div className="setting-row">
+          <span className="setting-label">预警敏感度</span>
+          <div className="setting-control">
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>高</div>
+            <div className="setting-opt selected">中</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>低</div>
+          </div>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">消息合并</span>
+          <div className="setting-control">
+            <div className="setting-opt selected">开启</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>关闭</div>
+          </div>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">夜间免打扰</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input className="setting-input" defaultValue="22:00" style={{ width: 70 }} />
+            <span>-</span>
+            <input className="setting-input" defaultValue="07:00" style={{ width: 70 }} />
+          </div>
+        </div>
+      </div>
+      <div className="setting-group">
+        <div className="setting-group-title">专业设置</div>
+        <div className="setting-row">
+          <span className="setting-label">专业深度</span>
+          <div className="setting-control">
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>住院医</div>
+            <div className="setting-opt selected">主治</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>主任</div>
+          </div>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">多语言</span>
+          <div className="setting-control">
+            <div className="setting-opt selected">中文</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>中英双语</div>
+          </div>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">免责声明</span>
+          <div className="setting-control">
+            <div className="setting-opt selected">始终显示</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>仅关键决策</div>
+            <div className="setting-opt" onClick={e => { (e.currentTarget.parentNode!.querySelectorAll('.setting-opt') as NodeListOf<Element>).forEach(el => el.classList.remove('selected')); e.currentTarget.classList.add('selected'); }}>不显示</div>
+          </div>
+        </div>
+      </div>
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>取消</button>
-        <button className="modal-btn primary">保存设置</button>
+        <button className="modal-btn primary" onClick={() => { onClose(); alert('设置已保存'); }}>保存设置</button>
       </div>
     </Modal>
   );
 }
 
+// ==================== Upload ====================
+export function UploadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="患者资料上传">
+      <p style={{ fontSize: 12, color: '#64748b', marginBottom: 12 }}>上传患者资料，AI自动识别并归类至对应患者对话</p>
+      <div className="setting-group">
+        <div className="setting-group-title">上传方式</div>
+        <div className="setting-row">
+          <span className="setting-label">拍照上传</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>检验单、影像资料、化验单</span>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">图片上传</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>已有图片文件</span>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">语音输入</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>查房录音、口述记录</span>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">文字输入</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>手动录入体征、症状</span>
+        </div>
+        <div className="setting-row">
+          <span className="setting-label">文件导入</span>
+          <span style={{ fontSize: 11, color: '#64748b' }}>PDF、Word、Excel等</span>
+        </div>
+      </div>
+      <div className="modal-actions">
+        <button className="modal-btn" onClick={onClose}>关闭</button>
+      </div>
+    </Modal>
+  );
+}
+
+// ==================== Account ====================
 export function AccountModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('profile');
+  const { logout } = useAuthStore();
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="账号管理">
       <div className="account-tabs">
-        <div 
+        <div
           className={`account-tab ${activeTab === 'profile' ? 'active' : ''}`}
           onClick={() => setActiveTab('profile')}
         >
           个人信息
         </div>
-        <div 
+        <div
           className={`account-tab ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => setActiveTab('settings')}
         >
           个人设置
         </div>
-        <div 
+        <div
           className={`account-tab ${activeTab === 'security' ? 'active' : ''}`}
           onClick={() => setActiveTab('security')}
         >
           安全设置
         </div>
       </div>
-      
+
       {activeTab === 'profile' && (
         <div className="account-panel active">
           <div className="profile-header">
@@ -193,12 +397,28 @@ export function AccountModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             <span className="setting-value-inline">DOC-2024001</span>
           </div>
           <div className="setting-row-inline">
+            <span className="setting-label-inline">手机号</span>
+            <span className="setting-value-inline">138****8888</span>
+          </div>
+          <div className="setting-row-inline">
+            <span className="setting-label-inline">邮箱</span>
+            <span className="setting-value-inline">doctor@hospital.com</span>
+          </div>
+          <div className="setting-row-inline">
             <span className="setting-label-inline">科室</span>
             <span className="setting-value-inline">神经内科</span>
           </div>
+          <div className="setting-row-inline">
+            <span className="setting-label-inline">职称</span>
+            <span className="setting-value-inline">住院医师</span>
+          </div>
+          <div className="setting-row-inline">
+            <span className="setting-label-inline">最后登录</span>
+            <span className="setting-value-inline">{new Date().toLocaleString('zh-CN')}</span>
+          </div>
         </div>
       )}
-      
+
       {activeTab === 'settings' && (
         <div className="account-panel active">
           <div className="setting-group">
@@ -211,14 +431,44 @@ export function AccountModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
                 <div className="setting-opt">大</div>
               </div>
             </div>
+            <div className="setting-row">
+              <span className="setting-label">消息气泡</span>
+              <div className="setting-control">
+                <div className="setting-opt selected">微信风格</div>
+                <div className="setting-opt">简洁风格</div>
+              </div>
+            </div>
+          </div>
+          <div className="setting-group">
+            <div className="setting-group-title">通知设置</div>
+            <div className="setting-row">
+              <span className="setting-label">新消息提醒</span>
+              <div className="toggle-switch active"><div className="knob"></div></div>
+            </div>
+            <div className="setting-row">
+              <span className="setting-label">危急值推送</span>
+              <div className="toggle-switch active"><div className="knob"></div></div>
+            </div>
+            <div className="setting-row">
+              <span className="setting-label">声音提醒</span>
+              <div className="toggle-switch"><div className="knob"></div></div>
+            </div>
+            <div className="setting-row">
+              <span className="setting-label">夜间免打扰</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input className="setting-input" defaultValue="22:00" style={{ width: 70 }} />
+                <span>-</span>
+                <input className="setting-input" defaultValue="07:00" style={{ width: 70 }} />
+              </div>
+            </div>
           </div>
           <div className="modal-actions">
             <button className="modal-btn" onClick={onClose}>取消</button>
-            <button className="modal-btn primary">保存设置</button>
+            <button className="modal-btn primary" onClick={() => { onClose(); alert('个人设置已保存'); }}>保存设置</button>
           </div>
         </div>
       )}
-      
+
       {activeTab === 'security' && (
         <div className="account-panel active">
           <div className="setting-group">
@@ -231,11 +481,35 @@ export function AccountModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               <label>新密码</label>
               <input type="password" placeholder="请输入新密码" />
             </div>
-            <button className="modal-btn primary" style={{ width: '100%', marginTop: 8 }}>
+            <div className="login-field">
+              <label>确认新密码</label>
+              <input type="password" placeholder="请再次输入新密码" />
+            </div>
+            <button className="modal-btn primary" style={{ width: '100%', marginTop: 8 }} onClick={() => { alert('密码修改成功'); onClose(); }}>
               修改密码
             </button>
           </div>
-          <button className="logout-btn">退出登录</button>
+          <div className="setting-group">
+            <div className="setting-group-title">登录设备</div>
+            <div className="setting-row-inline">
+              <span className="setting-label-inline">🖥️ 孙原的MacBook Air</span>
+              <span className="setting-value-inline" style={{ color: '#22c55e' }}>当前设备</span>
+            </div>
+            <div className="setting-row-inline">
+              <span className="setting-label-inline">📱 iPhone 15 Pro</span>
+              <span className="setting-value-inline" style={{ color: '#94a3b8' }}>2026-05-28</span>
+            </div>
+          </div>
+          <div className="setting-group">
+            <div className="setting-group-title">操作日志</div>
+            <div style={{ fontSize: 11, color: '#64748b', lineHeight: 1.8 }}>
+              • {new Date().toLocaleString('zh-CN')} 登录成功 (MacBook Air)<br />
+              • 2026-05-29 08:30 登录成功 (iPhone 15 Pro)<br />
+              • 2026-05-28 22:15 登录成功 (MacBook Air)<br />
+              • 2026-05-28 09:00 修改密码
+            </div>
+          </div>
+          <button className="logout-btn" onClick={() => { logout(); onClose(); }}>退出登录</button>
         </div>
       )}
     </Modal>
