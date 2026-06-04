@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { usePatientStore } from '../stores/patientStore';
 import { useChatStore } from '../stores/chatStore';
 import MessageBubble from './MessageBubble';
 import DiagnosisPanel from './DiagnosisPanel';
 import { useShortcuts } from '../hooks/useShortcuts';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { useNetworkStatus, saveOfflineMessage, getPendingCount, syncWhenOnline, requestBackgroundSync } from '../utils/offlineSync';
 import {
   MedicalRecordModal, MedicalOrderModal, ConsultModal,
   TrendModal, HandoverModal, DRGModal, SettingsModal, UploadModal,
@@ -35,8 +37,11 @@ export default function ChatPanel() {
   const [selectedDate, setSelectedDate] = useState('');
   const [searchResults, setSearchResults] = useState<number[]>([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const isOnline = useNetworkStatus();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const messageRefs = useRef<Map<number, HTMLElement>>(new Map());
@@ -108,14 +113,53 @@ export default function ChatPanel() {
   const shortcutHandlers = useMemo(() => ({ onNewChat: handleNewChat, onSearch: handleFocusSearch, onQuickAction: handleQuickActionByIndex, onToggleDarkMode: handleToggleDarkMode }), [handleNewChat, handleFocusSearch, handleQuickActionByIndex, handleToggleDarkMode]);
   useShortcuts(shortcutHandlers);
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
-  const scrollToBottom = () => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); };
+  useEffect(() => {
+    // Check pending offline messages
+    getPendingCount().then(setPendingCount);
+    
+    // Sync when back online
+    if (isOnline) {
+      syncWhenOnline().then(synced => {
+        if (synced > 0) {
+          setPendingCount(0);
+          requestBackgroundSync();
+        }
+      });
+    }
+  }, [isOnline]);
+
+  useEffect(() => {
+    // Scroll to bottom when messages change
+    if (virtuosoRef.current && messages.length > 0) {
+      setTimeout(() => {
+        virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth', align: 'end' });
+      }, 100);
+    }
+  }, [messages.length]);
 
   const handleSend = async () => {
     if (!inputText.trim() || !currentPatient || isLoading || isStreaming) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    addMessage({ id: `msg_${Date.now()}`, conversation_id: `conv_${currentPatient.id}`, role: 'user', content: inputText, msg_type: 'doctor', timestamp: timeStr });
+    const userMessage: Message = {
+      id: `msg_${Date.now()}`,
+      conversation_id: `conv_${currentPatient.id}`,
+      role: 'user',
+      content: inputText,
+      msg_type: 'doctor',
+      timestamp: timeStr,
+    };
+    
+    addMessage(userMessage);
+    
+    // Save offline if not connected
+    if (!isOnline) {
+      await saveOfflineMessage(userMessage);
+      setPendingCount(prev => prev + 1);
+      setInputText('');
+      return;
+    }
+    
     const currentInput = inputText;
     setInputText('');
     setIsLoading(true);
@@ -271,18 +315,39 @@ export default function ChatPanel() {
         <button className="toolbar-btn" onClick={handleClearFilters}>清除</button>
       </div>
 
+      {!isOnline && (
+        <div style={{
+          background: '#fef3c7',
+          color: '#92400e',
+          padding: '8px 16px',
+          fontSize: 12,
+          textAlign: 'center',
+          borderBottom: '1px solid #fde68a',
+        }}>
+          📴 离线模式 - 消息将在联网后同步 {pendingCount > 0 && `(${pendingCount}条待同步)`}
+        </div>
+      )}
+
       <div className="messages-area">
-        {messages.length === 0 ? (
+        {filteredMessages.length === 0 ? (
           <div style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>
             <div style={{ fontSize: 36, marginBottom: 12 }}>💬</div>
             <div>开始与AI助手讨论 {currentPatient.name} 的病情</div>
           </div>
         ) : (
-          filteredMessages.map((msg, idx) => (
-            <div key={msg.id} ref={el => { if (el) messageRefs.current.set(idx, el); }}>
-              <MessageBubble message={msg} onAction={handleAction} isNew={newMessageIds.has(msg.id)} />
-            </div>
-          ))
+          <Virtuoso
+            ref={virtuosoRef}
+            data={filteredMessages}
+            followOutput="smooth"
+            initialTopMostItemIndex={filteredMessages.length - 1}
+            itemContent={(index, msg) => (
+              <div key={msg.id} ref={el => { if (el) messageRefs.current.set(index, el); }}>
+                <MessageBubble message={msg} onAction={handleAction} isNew={newMessageIds.has(msg.id)} />
+              </div>
+            )}
+            style={{ height: '100%' }}
+            overscan={10}
+          />
         )}
         {isLoading && (
           <div className="message msg-left">

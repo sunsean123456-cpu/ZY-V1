@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Message } from '../types';
 import { useChatStore } from '../stores/chatStore';
 
@@ -9,7 +9,7 @@ interface MessageBubbleProps {
   searchHighlight?: string;
 }
 
-export default function MessageBubble({ message, onAction, isNew, searchHighlight }: MessageBubbleProps) {
+function MessageBubble({ message, onAction, isNew, searchHighlight }: MessageBubbleProps) {
   const { msg_type, content, timestamp, has_actions } = message;
   const { isEditing, setEditing, editMessage, deleteMessage } = useChatStore();
   const [displayedText, setDisplayedText] = useState('');
@@ -331,3 +331,9 @@ export default function MessageBubble({ message, onAction, isNew, searchHighligh
     </div>
   );
 }
+
+export default React.memo(MessageBubble, (prev, next) => {
+  return prev.message.id === next.message.id
+    && prev.message.content === next.message.content
+    && prev.isNew === next.isNew;
+});

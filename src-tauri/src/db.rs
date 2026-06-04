@@ -1,5 +1,6 @@
 use rusqlite::{Connection, Result, params};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +52,34 @@ pub struct MedicalOrder {
     pub order_type: String,
     pub content: String,
     pub status: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Consultation {
+    pub id: String,
+    pub patient_id: String,
+    pub requester_id: String,
+    pub requester_name: String,
+    pub departments: String,
+    pub reason: String,
+    pub status: String,
+    pub opinions: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub completed_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLog {
+    pub id: String,
+    pub user_id: String,
+    pub user_name: String,
+    pub action: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub details: String,
+    pub ip_address: String,
     pub created_at: String,
 }
 
@@ -112,7 +141,38 @@ impl Database {
                 status TEXT,
                 created_at TEXT,
                 FOREIGN KEY (patient_id) REFERENCES patients(id)
-            );"
+            );
+
+            CREATE TABLE IF NOT EXISTS consultations (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL,
+                requester_id TEXT NOT NULL,
+                requester_name TEXT NOT NULL,
+                departments TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                opinions TEXT DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                completed_at TEXT,
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                user_name TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target_type TEXT DEFAULT '',
+                target_id TEXT DEFAULT '',
+                details TEXT DEFAULT '{}',
+                ip_address TEXT DEFAULT '',
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
+            CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);"
         )?;
 
         Ok(Database {
@@ -397,6 +457,266 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM medical_orders WHERE id=?1", params![id])?;
         Ok(())
+    }
+
+    // ===== Consultation operations =====
+
+    pub fn create_consultation(&self, c: &Consultation) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO consultations (id, patient_id, requester_id, requester_name, departments, reason, status, opinions, created_at, updated_at, completed_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            params![
+                c.id, c.patient_id, c.requester_id, c.requester_name,
+                c.departments, c.reason, c.status, c.opinions,
+                c.created_at, c.updated_at, c.completed_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_consultations(&self, patient_id: &str) -> Result<Vec<Consultation>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, patient_id, requester_id, requester_name, departments, reason, status, opinions, created_at, updated_at, completed_at
+             FROM consultations WHERE patient_id=?1 ORDER BY created_at DESC"
+        )?;
+        let rows = stmt.query_map(params![patient_id], |row| {
+            Ok(Consultation {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                requester_id: row.get(2)?,
+                requester_name: row.get(3)?,
+                departments: row.get(4)?,
+                reason: row.get(5)?,
+                status: row.get(6)?,
+                opinions: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+                completed_at: row.get(10)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn update_consultation_status(&self, id: &str, status: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let completed = if status == "completed" { Some(now.clone()) } else { None };
+        conn.execute(
+            "UPDATE consultations SET status=?2, updated_at=?3, completed_at=COALESCE(?4, completed_at) WHERE id=?1",
+            params![id, status, now, completed],
+        )?;
+        Ok(())
+    }
+
+    pub fn add_consultation_opinion(&self, consultation_id: &str, dept: &str, doctor: &str, content: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        // Read current opinions
+        let current: String = conn.query_row(
+            "SELECT opinions FROM consultations WHERE id=?1",
+            params![consultation_id],
+            |row| row.get(0),
+        )?;
+        let mut opinions: Vec<serde_json::Value> = serde_json::from_str(&current).unwrap_or_default();
+        opinions.push(json!({
+            "dept": dept,
+            "doctor": doctor,
+            "content": content,
+            "time": now,
+        }));
+        let new_json = serde_json::to_string(&opinions).unwrap_or_else(|_| "[]".to_string());
+        conn.execute(
+            "UPDATE consultations SET opinions=?2, updated_at=?3 WHERE id=?1",
+            params![consultation_id, new_json, now],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_all_consultations_raw(&self) -> Result<Vec<Consultation>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, patient_id, requester_id, requester_name, departments, reason, status, opinions, created_at, updated_at, completed_at FROM consultations"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Consultation {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                requester_id: row.get(2)?,
+                requester_name: row.get(3)?,
+                departments: row.get(4)?,
+                reason: row.get(5)?,
+                status: row.get(6)?,
+                opinions: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+                completed_at: row.get(10)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    // ===== Audit Log operations =====
+
+    pub fn log_audit(&self, log: &AuditLog) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO audit_logs (id, user_id, user_name, action, target_type, target_id, details, ip_address, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            params![
+                log.id, log.user_id, log.user_name, log.action,
+                log.target_type, log.target_id, log.details,
+                log.ip_address, log.created_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_audit_logs(
+        &self,
+        user_id: Option<&str>,
+        action: Option<&str>,
+        start_date: Option<&str>,
+        end_date: Option<&str>,
+        limit: Option<i32>,
+    ) -> Result<Vec<AuditLog>> {
+        let conn = self.conn.lock().unwrap();
+        let mut sql = String::from(
+            "SELECT id, user_id, user_name, action, target_type, target_id, details, ip_address, created_at FROM audit_logs WHERE 1=1"
+        );
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(uid) = user_id {
+            sql.push_str(&format!(" AND user_id=?{}", param_values.len() + 1));
+            param_values.push(Box::new(uid.to_string()));
+        }
+        if let Some(act) = action {
+            sql.push_str(&format!(" AND action=?{}", param_values.len() + 1));
+            param_values.push(Box::new(act.to_string()));
+        }
+        if let Some(sd) = start_date {
+            sql.push_str(&format!(" AND created_at>=?{}", param_values.len() + 1));
+            param_values.push(Box::new(sd.to_string()));
+        }
+        if let Some(ed) = end_date {
+            sql.push_str(&format!(" AND created_at<=?{}", param_values.len() + 1));
+            param_values.push(Box::new(ed.to_string()));
+        }
+        sql.push_str(" ORDER BY created_at DESC");
+        if let Some(lim) = limit {
+            sql.push_str(&format!(" LIMIT {}", lim));
+        }
+
+        let mut stmt = conn.prepare(&sql)?;
+        let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(params_ref.as_slice(), |row| {
+            Ok(AuditLog {
+                id: row.get(0)?,
+                user_id: row.get(1)?,
+                user_name: row.get(2)?,
+                action: row.get(3)?,
+                target_type: row.get(4)?,
+                target_id: row.get(5)?,
+                details: row.get(6)?,
+                ip_address: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    // ===== Backup helpers =====
+
+    pub fn get_all_patients_raw(&self) -> Result<Vec<Patient>> {
+        self.get_all_patients()
+    }
+
+    pub fn get_all_messages_raw(&self) -> Result<Vec<Message>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, conversation_id, role, content, msg_type, timestamp, suggestions FROM messages"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(Message {
+                id: row.get(0)?,
+                conversation_id: row.get(1)?,
+                role: row.get(2)?,
+                content: row.get(3)?,
+                msg_type: row.get(4)?,
+                timestamp: row.get(5)?,
+                suggestions: row.get(6)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_all_records_raw(&self) -> Result<Vec<MedicalRecord>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, patient_id, record_type, content, created_at FROM medical_records"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(MedicalRecord {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                record_type: row.get(2)?,
+                content: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_all_orders_raw(&self) -> Result<Vec<MedicalOrder>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, patient_id, order_type, content, status, created_at FROM medical_orders"
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(MedicalOrder {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                order_type: row.get(2)?,
+                content: row.get(3)?,
+                status: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn clear_all_data(&self) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute_batch(
+            "DELETE FROM messages;
+             DELETE FROM conversations;
+             DELETE FROM medical_records;
+             DELETE FROM medical_orders;
+             DELETE FROM consultations;
+             DELETE FROM patients;"
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_patient(&self, p: &Patient) -> Result<()> {
+        self.create_patient(p)
+    }
+
+    pub fn insert_message(&self, m: &Message) -> Result<()> {
+        self.create_message(m)
+    }
+
+    pub fn insert_record(&self, r: &MedicalRecord) -> Result<()> {
+        self.create_medical_record(r)
+    }
+
+    pub fn insert_order(&self, o: &MedicalOrder) -> Result<()> {
+        self.create_medical_order(o)
+    }
+
+    pub fn insert_consultation(&self, c: &Consultation) -> Result<()> {
+        self.create_consultation(c)
     }
 
     // Initialize demo data

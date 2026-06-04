@@ -79,6 +79,41 @@ export interface TrendData {
   neut: number[];
 }
 
+// Consultation types
+export interface Consultation {
+  id: string;
+  patient_id: string;
+  requester_id: string;
+  requester_name: string;
+  departments: string; // JSON array
+  reason: string;
+  status: 'pending' | 'approved' | 'in_progress' | 'completed' | 'rejected';
+  opinions: string; // JSON array
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface ConsultationOpinion {
+  dept: string;
+  doctor: string;
+  content: string;
+  time: string;
+}
+
+// Audit Log types
+export interface AuditLog {
+  id: string;
+  user_id: string;
+  user_name: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: string;
+  ip_address: string;
+  created_at: string;
+}
+
 export interface RichPatientData {
   id: string;
   name: string;

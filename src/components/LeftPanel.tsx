@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
+import { Virtuoso } from 'react-virtuoso';
 import { usePatientStore } from '../stores/patientStore';
 import type { RichPatientData } from '../types';
 
@@ -69,27 +70,54 @@ export default function LeftPanel({
           <span className="group-title">{title}</span>
           <span className="group-badge">{groupPatients.length}</span>
         </div>
-        <div className={`group-list ${expanded ? '' : 'hidden'}`}>
-          {groupPatients.map(patient => (
-            <div
-              key={patient.id}
-              className={`patient-item ${currentRichPatient?.id === patient.id ? 'active' : ''}`}
-              onClick={() => handleSelectPatient(patient)}
-            >
-              <div className={`status-dot ${patient.status}`}></div>
-              <div className="pi-info">
-                <div className="pi-name">
-                  {patient.name}
-                  <span className={`patient-tag ${type}`}>{getGroupLabel(type)}</span>
+        {!expanded ? null : groupPatients.length > 20 ? (
+          <Virtuoso
+            data={groupPatients}
+            itemContent={(index, patient) => (
+              <div
+                key={patient.id}
+                className={`patient-item ${currentRichPatient?.id === patient.id ? 'active' : ''}`}
+                onClick={() => handleSelectPatient(patient)}
+              >
+                <div className={`status-dot ${patient.status}`}></div>
+                <div className="pi-info">
+                  <div className="pi-name">
+                    {patient.name}
+                    <span className={`patient-tag ${type}`}>{getGroupLabel(type)}</span>
+                  </div>
+                  <div className="pi-bed">{patient.bed} · {patient.surgeryType || patient.sex + patient.age + '岁'}</div>
                 </div>
-                <div className="pi-bed">{patient.bed} · {patient.surgeryType || patient.sex + patient.age + '岁'}</div>
+                {patient.status === 'has-msg' && (
+                  <div className="badge-dot">!</div>
+                )}
               </div>
-              {patient.status === 'has-msg' && (
-                <div className="badge-dot">!</div>
-              )}
-            </div>
-          ))}
-        </div>
+            )}
+            style={{ height: Math.min(groupPatients.length * 56, 300) }}
+            overscan={5}
+          />
+        ) : (
+          <div className="group-list">
+            {groupPatients.map(patient => (
+              <div
+                key={patient.id}
+                className={`patient-item ${currentRichPatient?.id === patient.id ? 'active' : ''}`}
+                onClick={() => handleSelectPatient(patient)}
+              >
+                <div className={`status-dot ${patient.status}`}></div>
+                <div className="pi-info">
+                  <div className="pi-name">
+                    {patient.name}
+                    <span className={`patient-tag ${type}`}>{getGroupLabel(type)}</span>
+                  </div>
+                  <div className="pi-bed">{patient.bed} · {patient.surgeryType || patient.sex + patient.age + '岁'}</div>
+                </div>
+                {patient.status === 'has-msg' && (
+                  <div className="badge-dot">!</div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   };
