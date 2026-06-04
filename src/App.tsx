@@ -187,7 +187,7 @@ function App() {
           showUpload={showUpload}
           setShowUpload={setShowUpload}
         />
-        {currentPatient ? <ChatPanel switchPatient={switchPatient} /> : <GeneralAssistant />}
+        {currentPatient ? <ChatPanel switchPatient={switchPatient} /> : <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}><GeneralAssistant /></div>}
       </div>
     </div>
   );

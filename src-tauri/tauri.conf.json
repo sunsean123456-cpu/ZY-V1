@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "住院医生AI助手 v8",
+        "title": "查查鱼 - 住院医AI助手",
         "width": 1200,
         "height": 780,
         "minWidth": 900,

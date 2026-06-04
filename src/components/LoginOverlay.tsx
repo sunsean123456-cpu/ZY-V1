@@ -34,7 +34,7 @@ export default function LoginOverlay() {
       }}>
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
           <span style={{ fontSize: 48 }}>🤖</span>
-          <h2 style={{ fontSize: 20, color: '#1e293b', marginTop: 10, fontWeight: 600 }}>住院医生AI助手</h2>
+          <h2 style={{ fontSize: 20, color: '#1e293b', marginTop: 10, fontWeight: 600 }}>查查鱼 - 住院医AI助手</h2>
           <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>请登录您的账号</p>
         </div>
 

@@ -22,8 +22,13 @@ export default function TitleBar({ isCollapsed, onToggleCollapse, showAccount, s
     <>
       <div className="title-bar" data-tauri-drag-region>
         <div className="title-bar-left">
-          <span className="icon">🤖</span>
-          <span>住院医生AI助手</span>
+          <div style={{
+            width: 28, height: 28, borderRadius: 6,
+            background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: '#fff', fontSize: 13, fontWeight: 700,
+          }}>查</div>
+          <span style={{ fontSize: 14, fontWeight: 600 }}>查查鱼 - 住院医AI助手</span>
           <span
             style={{
               width: 8,
