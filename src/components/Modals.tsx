@@ -2,6 +2,12 @@ import { useState, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useAuthStore } from '../stores/authStore';
 import type { RichPatientData } from '../types';
+import {
+  exportMedicalRecord,
+  exportOrderList,
+  exportHandover,
+  exportConsult,
+} from '../utils/pdfExport';
 
 interface ModalProps {
   isOpen: boolean;
@@ -34,6 +40,7 @@ export function MedicalRecordModal({ isOpen, onClose, patient }: {
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>取消</button>
         <button className="modal-btn" onClick={() => { onClose(); alert('请在对话框中输入修改意见'); }}>修改</button>
+        <button className="modal-btn" onClick={() => { exportMedicalRecord(patient.record, patient.name); }}>导出PDF</button>
         <button className="modal-btn primary" onClick={() => { onClose(); alert('病历已提交至HIS系统'); }}>确认提交</button>
       </div>
     </Modal>
@@ -79,6 +86,10 @@ export function MedicalOrderModal({ isOpen, onClose, patient }: {
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>取消</button>
         <button className="modal-btn" onClick={() => { onClose(); alert('请在对话框中输入修改意见'); }}>修改</button>
+        <button className="modal-btn" onClick={() => { 
+          const selected = patient.orders.filter((_, i) => checkedOrders.has(i));
+          exportOrderList(selected, patient.name); 
+        }}>导出PDF</button>
         <button className="modal-btn primary" onClick={() => { onClose(); alert(`已提交 ${checkedOrders.size} 条医嘱至HIS系统`); }}>确认提交</button>
       </div>
     </Modal>
@@ -102,6 +113,7 @@ export function ConsultModal({ isOpen, onClose, patient }: {
       </div>
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>关闭</button>
+        <button className="modal-btn" onClick={() => { exportConsult(patient.consult, patient.name); }}>导出PDF</button>
         <button className="modal-btn primary" onClick={() => { onClose(); alert('会诊意见已确认执行'); }}>确认执行</button>
       </div>
     </Modal>
@@ -115,32 +127,70 @@ export function TrendModal({ isOpen, onClose, patient }: {
   if (!patient) return null;
 
   const chartOption = {
-    tooltip: { trigger: 'axis' as const },
+    title: { text: '近7日检验指标趋势', left: 'center', textStyle: { fontSize: 14 } },
+    tooltip: {
+      trigger: 'axis' as const,
+      formatter: (params: any) => {
+        let html = `${params[0].axisValue}<br/>`;
+        params.forEach((p: any) => {
+          const isAbnormal = (p.seriesName === 'WBC' && (p.value > 10 || p.value < 4))
+            || (p.seriesName === 'CRP' && p.value > 5)
+            || (p.seriesName === 'NEUT%' && (p.value > 75 || p.value < 40));
+          html += `${p.marker} ${p.seriesName}: <b>${p.value}</b>${isAbnormal ? ' ⚠️' : ''}<br/>`;
+        });
+        return html;
+      }
+    },
     legend: { data: ['WBC', 'CRP', 'NEUT%'], bottom: 0, textStyle: { fontSize: 10 } },
-    grid: { left: 40, right: 20, top: 20, bottom: 40 },
+    grid: { left: 50, right: 50, top: 40, bottom: 40 },
     xAxis: {
       type: 'category' as const,
-      data: ['5/21', '5/22', '5/23', '5/24', '5/25', '5/26', '5/27'],
-      axisLabel: { fontSize: 10 },
+      data: ['D-6', 'D-5', 'D-4', 'D-3', 'D-2', 'D-1', '今日'],
+      axisLabel: { fontSize: 11 },
     },
     yAxis: [
-      { type: 'value' as const, name: 'WBC/NEUT%', nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 } },
-      { type: 'value' as const, name: 'CRP', nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 }, splitLine: { show: false } },
+      { type: 'value' as const, name: 'WBC/CRP', min: 0, nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 } },
+      { type: 'value' as const, name: 'NEUT%', min: 30, max: 100, nameTextStyle: { fontSize: 9 }, axisLabel: { fontSize: 9 }, splitLine: { show: false } },
     ],
     series: [
-      { name: 'WBC', type: 'line', data: patient.trends.wbc, yAxisIndex: 0, smooth: true, lineStyle: { color: '#3b82f6' } },
-      { name: 'CRP', type: 'line', data: patient.trends.crp, yAxisIndex: 1, smooth: true, lineStyle: { color: '#dc2626' } },
-      { name: 'NEUT%', type: 'line', data: patient.trends.neut, yAxisIndex: 0, smooth: true, lineStyle: { color: '#f59e0b' } },
+      {
+        name: 'WBC', type: 'line', data: patient.trends.wbc, yAxisIndex: 0, smooth: true,
+        lineStyle: { width: 2, color: '#3b82f6' },
+        markLine: {
+          silent: true,
+          data: [
+            { yAxis: 10, label: { formatter: '上限 10', fontSize: 10 }, lineStyle: { type: 'dashed', color: '#ef4444' } },
+            { yAxis: 4, label: { formatter: '下限 4', fontSize: 10 }, lineStyle: { type: 'dashed', color: '#22c55e' } }
+          ]
+        },
+        itemStyle: { color: (params: any) => params.value > 10 || params.value < 4 ? '#ef4444' : '#3b82f6' }
+      },
+      {
+        name: 'CRP', type: 'line', data: patient.trends.crp, yAxisIndex: 0, smooth: true,
+        lineStyle: { width: 2, color: '#10b981' },
+        markLine: {
+          silent: true,
+          data: [
+            { yAxis: 5, label: { formatter: '参考 <5', fontSize: 10 }, lineStyle: { type: 'dashed', color: '#f59e0b' } }
+          ]
+        },
+        itemStyle: { color: (params: any) => params.value > 5 ? '#ef4444' : '#10b981' }
+      },
+      {
+        name: 'NEUT%', type: 'line', data: patient.trends.neut, yAxisIndex: 1, smooth: true,
+        lineStyle: { width: 2, color: '#8b5cf6' },
+        itemStyle: { color: (params: any) => params.value > 75 || params.value < 40 ? '#ef4444' : '#8b5cf6' }
+      }
     ],
   };
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="检验指标趋势图">
       <div className="trend-chart">
-        <ReactECharts option={chartOption} style={{ height: 260 }} />
+        <ReactECharts option={chartOption} style={{ height: 320 }} />
       </div>
       <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 8, textAlign: 'center' }}>
-        近7日 WBC / CRP / NEUT% 变化趋势
+        近7日 WBC / CRP / NEUT% 变化趋势 | ⚠️ 表示超出参考范围
       </p>
     </Modal>
   );
@@ -172,7 +222,7 @@ export function HandoverModal({ isOpen, onClose, patient }: {
       <div className="record-preview" dangerouslySetInnerHTML={{ __html: handoverHtml }} />
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>关闭</button>
-        <button className="modal-btn" onClick={() => { alert('交班摘要已导出'); onClose(); }}>导出</button>
+        <button className="modal-btn" onClick={() => { exportHandover(handoverHtml, patient.name); onClose(); }}>导出PDF</button>
         <button className="modal-btn primary" onClick={() => { alert('交班摘要已发送至接班医生'); onClose(); }}>确认发送</button>
       </div>
     </Modal>

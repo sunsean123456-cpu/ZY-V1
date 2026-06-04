@@ -1,12 +1,114 @@
+import { useState, useEffect, useRef } from 'react';
 import type { Message } from '../types';
+import { useChatStore } from '../stores/chatStore';
 
 interface MessageBubbleProps {
   message: Message;
   onAction?: (action: string) => void;
+  isNew?: boolean;
+  searchHighlight?: string;
 }
 
-export default function MessageBubble({ message, onAction }: MessageBubbleProps) {
+export default function MessageBubble({ message, onAction, isNew, searchHighlight }: MessageBubbleProps) {
   const { msg_type, content, timestamp, has_actions } = message;
+  const { isEditing, setEditing, editMessage, deleteMessage } = useChatStore();
+  const [displayedText, setDisplayedText] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [isRecalled, setIsRecalled] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
+  const editing = isEditing === message.id;
+
+  useEffect(() => {
+    if (editing && editRef.current) {
+      editRef.current.focus();
+      editRef.current.style.height = 'auto';
+      editRef.current.style.height = editRef.current.scrollHeight + 'px';
+    }
+  }, [editing]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    // 只有新的 AI 消息才显示打字机效果
+    if (isNew && msg_type === 'ai' && content) {
+      let i = 0;
+      const timer = setInterval(() => {
+        if (i < content.length) {
+          setDisplayedText(content.substring(0, i + 1));
+          i++;
+        } else {
+          clearInterval(timer);
+        }
+      }, 20); // 20ms 每个字符
+      return () => clearInterval(timer);
+    } else {
+      setDisplayedText(content);
+    }
+  }, [content, isNew, msg_type]);
+
+  const renderContent = isNew && msg_type === 'ai' ? displayedText : content;
+
+  const canRecall = () => {
+    // 2分钟内可以撤回
+    if (!timestamp) return false;
+    const now = new Date();
+    const [h, m] = timestamp.split(':').map(Number);
+    const msgTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+    return (now.getTime() - msgTime.getTime()) < 2 * 60 * 1000;
+  };
+
+  const handleRecall = () => {
+    if (canRecall()) {
+      setIsRecalled(true);
+      deleteMessage(message.id);
+    }
+    setShowMenu(false);
+  };
+
+  const handleCopy = () => {
+    const text = content.replace(/<[^>]*>/g, '');
+    navigator.clipboard.writeText(text);
+    setShowMenu(false);
+  };
+
+  const handleEdit = () => {
+    setEditText(content.replace(/<[^>]*>/g, ''));
+    setEditing(message.id);
+    setShowMenu(false);
+  };
+
+  const handleSaveEdit = () => {
+    if (editText.trim()) {
+      editMessage(message.id, editText.trim());
+    }
+    setEditing(null);
+  };
+
+  const handleEditKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSaveEdit();
+    }
+    if (e.key === 'Escape') {
+      setEditing(null);
+    }
+  };
+
+  const highlightContent = (html: string) => {
+    if (!searchHighlight) return html;
+    const regex = new RegExp(`(${searchHighlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    return html.replace(regex, '<mark style="background:#fef08a;padding:0 2px;border-radius:2px">$1</mark>');
+  };
 
   const getAvatarIcon = () => {
     switch (msg_type) {
@@ -38,6 +140,19 @@ export default function MessageBubble({ message, onAction }: MessageBubbleProps)
   const alignClass = isRightAligned ? 'msg-right' : 'msg-left';
   const isRisk = message.is_risk;
 
+  if (isRecalled) {
+    return (
+      <div className={`message ${alignClass} type-${msg_type}`}>
+        <div className="msg-avatar" style={{ background: '#64748b' }}>
+          <span style={{ fontSize: 16 }}>💬</span>
+        </div>
+        <div className="bubble" style={{ background: '#f1f5f9', border: '1px dashed #cbd5e1', color: '#94a3b8', fontStyle: 'italic' }}>
+          消息已撤回
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`message ${alignClass} type-${msg_type} ${isRisk ? 'risk-alert' : ''}`}>
       <div className="msg-avatar" style={{
@@ -60,7 +175,7 @@ export default function MessageBubble({ message, onAction }: MessageBubbleProps)
         <span style={{ fontSize: 16 }}>{getAvatarIcon()}</span>
       </div>
 
-      <div className="bubble">
+      <div className="bubble" style={{ position: 'relative' }}>
         <div className="bubble-label" style={{
           fontSize: 10,
           fontWeight: 600,
@@ -78,7 +193,129 @@ export default function MessageBubble({ message, onAction }: MessageBubbleProps)
           {getLabel()}
         </div>
 
-        <div dangerouslySetInnerHTML={{ __html: content }} />
+        {/* 医生消息的 "..." 菜单按钮 */}
+        {msg_type === 'doctor' && (
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              width: 20,
+              height: 20,
+              borderRadius: 4,
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              color: '#64748b',
+              fontSize: 14,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: showMenu ? 1 : 0.4,
+              transition: 'opacity 0.15s',
+            }}
+            title="更多操作"
+          >
+            ⋯
+          </button>
+        )}
+
+        {/* 弹出菜单 */}
+        {showMenu && msg_type === 'doctor' && (
+          <div
+            ref={menuRef}
+            style={{
+              position: 'absolute',
+              top: 24,
+              right: 4,
+              background: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+              zIndex: 100,
+              minWidth: 120,
+              padding: 4,
+            }}
+          >
+            <div
+              onClick={handleEdit}
+              style={{ padding: '6px 10px', cursor: 'pointer', borderRadius: 4, fontSize: 12, color: '#374151' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              ✏️ 编辑
+            </div>
+            <div
+              onClick={handleRecall}
+              style={{
+                padding: '6px 10px',
+                cursor: canRecall() ? 'pointer' : 'not-allowed',
+                borderRadius: 4,
+                fontSize: 12,
+                color: canRecall() ? '#dc2626' : '#cbd5e1',
+              }}
+              onMouseEnter={e => canRecall() && (e.currentTarget.style.background = '#fef2f2')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              ↩️ 撤回{!canRecall() ? '（超时）' : ''}
+            </div>
+            <div
+              onClick={handleCopy}
+              style={{ padding: '6px 10px', cursor: 'pointer', borderRadius: 4, fontSize: 12, color: '#374151' }}
+              onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              📋 复制
+            </div>
+          </div>
+        )}
+
+        {/* 编辑模式 */}
+        {editing ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <textarea
+              ref={editRef}
+              value={editText}
+              onChange={e => {
+                setEditText(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
+              onKeyDown={handleEditKeyDown}
+              style={{
+                width: '100%',
+                padding: '6px 8px',
+                border: '1px solid #3b82f6',
+                borderRadius: 6,
+                fontSize: 12,
+                lineHeight: 1.6,
+                resize: 'none',
+                outline: 'none',
+                fontFamily: 'inherit',
+                background: '#fff',
+                color: '#1e293b',
+              }}
+              rows={2}
+            />
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setEditing(null)}
+                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 4, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                style={{ padding: '2px 8px', fontSize: 10, borderRadius: 4, border: 'none', background: '#3b82f6', color: '#fff', cursor: 'pointer' }}
+              >
+                保存 (Enter)
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: highlightContent(renderContent) }} />
+        )}
 
         <span className="msg-time">{timestamp}</span>
 

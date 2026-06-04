@@ -1,6 +1,11 @@
 use crate::db::{Database, Patient, Conversation, Message, MedicalRecord, MedicalOrder};
+use crate::ai::AIService;
 use tauri::State;
 use serde::{Deserialize, Serialize};
+
+pub struct AIState {
+    pub api_key: String,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ApiResponse<T> {
@@ -176,35 +181,63 @@ pub fn delete_medical_order(db: State<Database>, id: String) -> ApiResponse<()> 
     }
 }
 
-// AI Chat command (simulated response)
+// AI Chat command - 调用真实 LLM API (DashScope) 或 fallback
 #[tauri::command]
-pub async fn ai_chat(_message: String, _patient_context: String) -> ApiResponse<String> {
-    // Simulate AI response with realistic medical analysis
-    tokio::time::sleep(tokio::time::Duration::from_millis(800)).await;
-    
-    let response = format!(
-        r#"<div class="ai-conclusion">根据患者当前情况分析：</div>
-<div class="ai-section">
-<div class="ai-section-title">关键发现</div>
-<div class="ai-section-content">
-• 患者症状与诊断相符<br>
-• 需关注实验室检查变化趋势<br>
-• 当前治疗方案需根据最新检查结果调整
-</div>
-</div>
-<div class="ai-section">
-<div class="ai-section-title">建议</div>
-<div class="ai-section-content">
-① 密切监测生命体征变化<br>
-② 完善相关辅助检查<br>
-③ 根据检查结果调整治疗方案<br>
-④ 注意药物不良反应监测
-</div>
-</div>
-<div class="ai-risk">⚠️ 注意：此为AI辅助分析，临床决策请结合患者实际情况</div>"#,
-    );
+pub async fn ai_chat(
+    ai_state: tauri::State<'_, AIState>,
+    message: String,
+    patient_context: String,
+    history: Vec<(String, String)>,
+) -> Result<String, String> {
+    let service = AIService::new_with_key(ai_state.api_key.clone());
+    service.chat(&patient_context, &message, history).await
+}
 
-    ApiResponse::success(response)
+#[tauri::command]
+pub async fn ai_generate_record(
+    ai_state: tauri::State<'_, AIState>,
+    patient_info: String,
+    conversation: String,
+) -> Result<String, String> {
+    let service = AIService::new_with_key(ai_state.api_key.clone());
+    service.generate_medical_record(&patient_info, &conversation).await
+}
+
+#[tauri::command]
+pub async fn ai_generate_orders(
+    ai_state: tauri::State<'_, AIState>,
+    patient_info: String,
+) -> Result<String, String> {
+    let service = AIService::new_with_key(ai_state.api_key.clone());
+    service.generate_orders(&patient_info).await
+}
+
+#[tauri::command]
+pub async fn ai_generate_consult(
+    ai_state: tauri::State<'_, AIState>,
+    patient_info: String,
+) -> Result<String, String> {
+    let service = AIService::new_with_key(ai_state.api_key.clone());
+    service.generate_consult(&patient_info).await
+}
+
+#[tauri::command]
+pub async fn ai_generate_handover(
+    ai_state: tauri::State<'_, AIState>,
+    patient_info: String,
+    conversation: String,
+) -> Result<String, String> {
+    let service = AIService::new_with_key(ai_state.api_key.clone());
+    service.generate_handover(&patient_info, &conversation).await
+}
+
+#[tauri::command]
+pub async fn ai_generate_drg(
+    ai_state: tauri::State<'_, AIState>,
+    patient_info: String,
+) -> Result<String, String> {
+    let service = AIService::new_with_key(ai_state.api_key.clone());
+    service.generate_drg(&patient_info).await
 }
 
 // Window control commands

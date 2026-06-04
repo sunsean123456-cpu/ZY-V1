@@ -1,0 +1,40 @@
+/* 深色模式 - 通过 body.dark-mode 激活 */
+body.dark-mode { background: #0f172a; }
+body.dark-mode .app-window { background: #1e293b; }
+body.dark-mode .chat-panel { background: #0f172a; }
+body.dark-mode .chat-header { background: #1e293b; border-color: #334155; }
+body.dark-mode .ch-name { color: #e2e8f0; }
+body.dark-mode .ch-dx { background: #334155; color: #94a3b8; }
+body.dark-mode .ch-meta { color: #64748b; }
+body.dark-mode .chat-toolbar { background: #1e293b; border-color: #334155; }
+body.dark-mode .toolbar-date,
+body.dark-mode .toolbar-search { background: #0f172a; border-color: #475569; color: #e2e8f0; }
+body.dark-mode .messages-area { background: #0f172a; }
+body.dark-mode .date-divider { color: #64748b; }
+body.dark-mode .date-divider::before,
+body.dark-mode .date-divider::after { background: #334155; }
+body.dark-mode .input-area { background: #1e293b; border-color: #334155; }
+body.dark-mode .input-row textarea { background: #0f172a; border-color: #475569; color: #e2e8f0; }
+body.dark-mode .input-row textarea::placeholder { color: #64748b; }
+body.dark-mode .quick-btn { background: #334155; border-color: #475569; color: #cbd5e1; }
+body.dark-mode .quick-btn:hover { background: #1e3a5f; border-color: #3b82f6; color: #93c5fd; }
+body.dark-mode .bubble { color: #e2e8f0; }
+body.dark-mode .type-family .bubble { background: #334155; border-color: #475569; color: #cbd5e1; }
+body.dark-mode .type-nurse .bubble { background: #1c1917; border-color: #7f1d1d; }
+body.dark-mode .type-lab .bubble { background: #1c1a0e; border-color: #92400e; }
+body.dark-mode .ai-conclusion { background: #1e3a5f; color: #93c5fd; }
+body.dark-mode .ai-section-title { color: #60a5fa; }
+body.dark-mode .ai-section-content { color: #cbd5e1; }
+body.dark-mode .ai-risk { background: #1c1917; color: #f87171; }
+body.dark-mode .bubble-btn { background: #334155; border-color: #475569; color: #cbd5e1; }
+body.dark-mode .bubble-btn:hover { background: #1e3a5f; border-color: #3b82f6; }
+body.dark-mode .modal-box { background: #1e293b; color: #e2e8f0; }
+body.dark-mode .modal-box h3 { color: #f1f5f9; }
+body.dark-mode .record-preview,
+body.dark-mode .order-preview,
+body.dark-mode .consult-detail { background: #0f172a; border-color: #334155; color: #cbd5e1; }
+body.dark-mode .modal-btn { background: #334155; border-color: #475569; color: #cbd5e1; }
+body.dark-mode .setting-row { border-color: #334155; }
+body.dark-mode .setting-label { color: #94a3b8; }
+body.dark-mode .collapse-selector { background: #1e293b; border-color: #334155; }
+body.dark-mode .collapse-select { background: #0f172a; border-color: #475569; color: #e2e8f0; }

@@ -11,6 +11,7 @@ import ChatPanel from './components/ChatPanel';
 import type { Patient, ApiResponse } from './types';
 import './styles/chat.css';
 import './styles/modals.css';
+import './styles/dark.css';
 
 function App() {
   const { isLoggedIn } = useAuthStore();
@@ -20,6 +21,21 @@ function App() {
   const [showAccount, setShowAccount] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+    localStorage.setItem('darkMode', String(isDarkMode));
+  }, [isDarkMode]);
+
+  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -179,6 +195,8 @@ function App() {
         onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
         showAccount={showAccount}
         setShowAccount={setShowAccount}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={toggleDarkMode}
       />
       <div className="app-body">
         <LeftPanel
