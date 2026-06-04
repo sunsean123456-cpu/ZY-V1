@@ -67,7 +67,7 @@ export const useChatStore = create<ChatStore>((set) => ({
     }));
 
     // Split content into chunks by sentence boundaries
-    const chunks = fullContent.split(/(?<=[。！？\n\.\!\?])/);
+    const chunks = fullContent.match(/[^。！？\n\.\!\?]*[。！？\n\.\!\?]?/g)?.filter(Boolean) || [fullContent];
     let current = '';
     let i = 0;
 

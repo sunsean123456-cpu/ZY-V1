@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { usePatientStore } from '../stores/patientStore';
+import { useChatStore } from '../stores/chatStore';
 import type { RichPatientData } from '../types';
 
 interface LeftPanelProps {
@@ -18,13 +19,45 @@ export default function LeftPanel({
   setShowSettings,
   setShowUpload,
 }: LeftPanelProps) {
-  const { richPatients, currentRichPatient } = usePatientStore();
+  const { richPatients, currentRichPatient, setRichPatients } = usePatientStore();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [consultMode, setConsultMode] = useState(false);
   const [webSearch, setWebSearch] = useState(true);
   const [decisionStyle, setDecisionStyle] = useState('标准型');
   const [groupStates, setGroupStates] = useState({ preOp: true, postOp: true, historical: false });
+  const [showAddPatient, setShowAddPatient] = useState(false);
+  const [newPatient, setNewPatient] = useState({ name: '', sex: '男', age: '', bed: '', dx: '', admission: '', group: 'pre-op', surgeryType: '' });
+
+  const handleAddPatient = () => {
+    if (!newPatient.name.trim() || !newPatient.bed.trim()) {
+      alert('请填写患者姓名和床号');
+      return;
+    }
+    const id = `new_${Date.now()}`;
+    const added: RichPatientData = {
+      id,
+      name: newPatient.name,
+      sex: newPatient.sex,
+      age: parseInt(newPatient.age) || 0,
+      bed: newPatient.bed,
+      admission: newPatient.admission || `ADM${Date.now()}`,
+      dx: newPatient.dx || '待诊断',
+      status: 'stable',
+      group: newPatient.group,
+      surgeryType: newPatient.surgeryType || '',
+      initialMsgs: [{ type: 'ai', text: `欢迎！我是AI助手，已准备好为 ${newPatient.name} 提供诊疗支持。`, time: new Date().toTimeString().slice(0, 5), actions: true }],
+      pushSequence: [],
+      record: `<div class="section-title">基本信息</div>姓名：${newPatient.name} | 性别：${newPatient.sex} | 年龄：${newPatient.age}岁<br>床号：${newPatient.bed} | 住院号：${newPatient.admission}<br><div class="section-title">诊断</div>${newPatient.dx || '待诊断'}`,
+      orders: [],
+      consult: [],
+      trends: { wbc: [0,0,0,0,0,0,0], crp: [0,0,0,0,0,0,0], neut: [60,60,60,60,60,60,60] },
+      drg: { group: '待分组', weight: 0, estimatedCost: 0, usedCost: 0, risk: '未知', suggestions: [] },
+    };
+    setRichPatients([...richPatients, added]);
+    setNewPatient({ name: '', sex: '男', age: '', bed: '', dx: '', admission: '', group: 'pre-op', surgeryType: '' });
+    setShowAddPatient(false);
+  };
 
   const patients = richPatients.length > 0 ? richPatients : [];
 
@@ -73,7 +106,7 @@ export default function LeftPanel({
         {!expanded ? null : groupPatients.length > 20 ? (
           <Virtuoso
             data={groupPatients}
-            itemContent={(index, patient) => (
+            itemContent={(_index, patient) => (
               <div
                 key={patient.id}
                 className={`patient-item ${currentRichPatient?.id === patient.id ? 'active' : ''}`}
@@ -125,7 +158,19 @@ export default function LeftPanel({
   return (
     <div className={`left-panel ${isCollapsed ? 'collapsed' : ''}`}>
       <div className="assistant-entry">
-        <button className="assistant-btn">
+        <button className="assistant-btn" onClick={() => {
+          usePatientStore.getState().setCurrentPatient(null);
+          usePatientStore.getState().setCurrentRichPatient(null);
+          useChatStore.getState().setMessages([{
+            id: 'welcome_ai',
+            conversation_id: 'global',
+            role: 'assistant',
+            content: '<div class="ai-conclusion">您好，我是住院医生AI助手。</div><div class="ai-section"><div class="ai-section-title">我可以帮您</div><div class="ai-section-content">• 查询临床指南和诊疗规范<br>• 药物相互作用和剂量查询<br>• 检验结果解读和分析<br>• 病历书写和医嘱建议<br>• DRG/DIP 分组和费用分析</div></div><div class="ai-section"><div class="ai-section-title">使用方式</div><div class="ai-section-content">① 选择左侧患者进行针对性诊疗<br>② 或直接在此输入问题获取通用帮助</div></div>',
+            msg_type: 'ai',
+            timestamp: new Date().toTimeString().slice(0, 5),
+            has_actions: true,
+          }]);
+        }}>
           <span className="ab-icon">🧠</span>
           智能助手
         </button>
@@ -170,6 +215,10 @@ export default function LeftPanel({
         <PatientGroup title="📁 历史患者" groupPatients={historicalPatients} type="historical" groupKey="historical" />
       </div>
 
+      <button className="add-patient-btn" onClick={() => setShowAddPatient(true)}>
+        <span style={{ fontSize: 16, marginRight: 6 }}>➕</span> 新添患者
+      </button>
+
       <div className="patient-count">
         当前: {patients.length}位在院患者
       </div>
@@ -211,10 +260,66 @@ export default function LeftPanel({
         </div>
 
         <div className="footer-actions">
-          <div className="footer-btn" onClick={() => setShowSettings(true)}>AI助手设置</div>
-          <div className="footer-btn" onClick={() => setShowUpload(true)}>患者资料上传</div>
+          <div className="footer-btn" onClick={() => setShowSettings(true)}>🎛️ 助手偏好设置</div>
+          <div className="footer-btn" onClick={() => setShowUpload(true)}>📂 导入患者资料</div>
         </div>
       </div>
+
+      {showAddPatient && (
+        <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setShowAddPatient(false)}>
+          <div className="modal-box" style={{ width: 420 }}>
+            <button className="modal-close" onClick={() => setShowAddPatient(false)}>✕</button>
+            <h3>➕ 新添患者</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="login-field">
+                <label>姓名 *</label>
+                <input value={newPatient.name} onChange={e => setNewPatient(p => ({...p, name: e.target.value}))} placeholder="请输入患者姓名" />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div className="login-field" style={{ flex: 1 }}>
+                  <label>性别</label>
+                  <select value={newPatient.sex} onChange={e => setNewPatient(p => ({...p, sex: e.target.value}))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }}>
+                    <option value="男">男</option>
+                    <option value="女">女</option>
+                  </select>
+                </div>
+                <div className="login-field" style={{ flex: 1 }}>
+                  <label>年龄</label>
+                  <input type="number" value={newPatient.age} onChange={e => setNewPatient(p => ({...p, age: e.target.value}))} placeholder="岁" />
+                </div>
+              </div>
+              <div className="login-field">
+                <label>床号 *</label>
+                <input value={newPatient.bed} onChange={e => setNewPatient(p => ({...p, bed: e.target.value}))} placeholder="如：32床" />
+              </div>
+              <div className="login-field">
+                <label>住院号</label>
+                <input value={newPatient.admission} onChange={e => setNewPatient(p => ({...p, admission: e.target.value}))} placeholder="留空自动生成" />
+              </div>
+              <div className="login-field">
+                <label>诊断</label>
+                <input value={newPatient.dx} onChange={e => setNewPatient(p => ({...p, dx: e.target.value}))} placeholder="初步诊断" />
+              </div>
+              <div className="login-field">
+                <label>分组</label>
+                <select value={newPatient.group} onChange={e => setNewPatient(p => ({...p, group: e.target.value}))} style={{ width: '100%', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13 }}>
+                  <option value="pre-op">术前</option>
+                  <option value="post-op">术后</option>
+                  <option value="historical">历史</option>
+                </select>
+              </div>
+              <div className="login-field">
+                <label>手术类型</label>
+                <input value={newPatient.surgeryType} onChange={e => setNewPatient(p => ({...p, surgeryType: e.target.value}))} placeholder="如：腹腔镜胆囊切除术" />
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn" onClick={() => setShowAddPatient(false)}>取消</button>
+              <button className="modal-btn primary" onClick={handleAddPatient}>确认添加</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

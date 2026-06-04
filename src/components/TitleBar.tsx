@@ -7,15 +7,16 @@ interface TitleBarProps {
   onToggleCollapse: () => void;
   showAccount: boolean;
   setShowAccount: (show: boolean) => void;
-  isDarkMode: boolean;
-  onToggleDarkMode: () => void;
+  isDarkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
-export default function TitleBar({ isCollapsed, onToggleCollapse, showAccount, setShowAccount, isDarkMode, onToggleDarkMode }: TitleBarProps) {
+export default function TitleBar({ isCollapsed, onToggleCollapse, showAccount, setShowAccount }: TitleBarProps) {
   const isOnline = useNetworkStatus();
-  const handleMinimize = () => invoke('minimize_window');
-  const handleMaximize = () => invoke('maximize_window');
-  const handleClose = () => invoke('close_window');
+  const isTauri = () => !!(window as any).__TAURI__;
+  const handleMinimize = () => { if (isTauri()) invoke('minimize_window'); };
+  const handleMaximize = () => { if (isTauri()) invoke('maximize_window'); };
+  const handleClose = () => { if (isTauri()) invoke('close_window'); };
 
   return (
     <>
@@ -37,9 +38,6 @@ export default function TitleBar({ isCollapsed, onToggleCollapse, showAccount, s
         </div>
 
         <div className="title-bar-extra">
-          <button className="mode-btn" onClick={onToggleDarkMode} title="切换深色模式 (Ctrl+D)">
-            {isDarkMode ? '☀️' : '🌙'}
-          </button>
           <button className="mode-btn" onClick={onToggleCollapse}>
             {isCollapsed ? '展开' : '折叠'}
           </button>

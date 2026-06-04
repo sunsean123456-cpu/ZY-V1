@@ -21,21 +21,11 @@ function App() {
   const [showAccount, setShowAccount] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    const saved = localStorage.getItem('darkMode');
-    return saved === 'true';
-  });
+  // Dark mode removed
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
-    localStorage.setItem('darkMode', String(isDarkMode));
-  }, [isDarkMode]);
-
-  const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
+    document.body.classList.remove('dark-mode');
+  }, []);
 
   useEffect(() => {
     if (isLoggedIn) {
@@ -43,46 +33,37 @@ function App() {
     }
   }, [isLoggedIn]);
 
+  const isTauri = () => !!(window as any).__TAURI__;
+
   const loadPatients = async () => {
-    // Load rich patient data into store
+    // Load rich patient data into store immediately
     setRichPatients(patientsData);
 
-    // Also try to load from backend
-    try {
-      const response = await invoke<ApiResponse<Patient[]>>('get_all_patients');
-      if (response.success && response.data && response.data.length > 0) {
-        setPatients(response.data);
-      } else {
-        // Map rich data to Patient format for backend compat
-        const mapped: Patient[] = patientsData.map(p => ({
-          id: p.id,
-          name: p.name,
-          bed_number: p.bed,
-          gender: p.sex,
-          age: p.age,
-          diagnosis: p.dx,
-          admission_date: '2026-05-27',
-          admission_no: p.admission,
-          status: p.status,
-          group_type: p.group,
-        }));
-        setPatients(mapped);
+    // Map rich data to Patient format
+    const mapped: Patient[] = patientsData.map(p => ({
+      id: p.id,
+      name: p.name,
+      bed_number: p.bed,
+      gender: p.sex,
+      age: p.age,
+      diagnosis: p.dx,
+      admission_date: '2026-05-27',
+      admission_no: p.admission,
+      status: p.status,
+      group_type: p.group,
+    }));
+    setPatients(mapped);
+
+    // Try to load from Tauri backend if available
+    if (isTauri()) {
+      try {
+        const response = await invoke<ApiResponse<Patient[]>>('get_all_patients');
+        if (response.success && response.data && response.data.length > 0) {
+          setPatients(response.data);
+        }
+      } catch {
+        // Use local data as fallback
       }
-    } catch {
-      // Backend may not be ready; use rich data directly
-      const mapped: Patient[] = patientsData.map(p => ({
-        id: p.id,
-        name: p.name,
-        bed_number: p.bed,
-        gender: p.sex,
-        age: p.age,
-        diagnosis: p.dx,
-        admission_date: '2026-05-27',
-        admission_no: p.admission,
-        status: p.status,
-        group_type: p.group,
-      }));
-      setPatients(mapped);
     }
 
     // Set first patient as current
@@ -195,8 +176,6 @@ function App() {
         onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
         showAccount={showAccount}
         setShowAccount={setShowAccount}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={toggleDarkMode}
       />
       <div className="app-body">
         <LeftPanel

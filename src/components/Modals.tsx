@@ -409,6 +409,13 @@ export function UploadModal({ isOpen, onClose }: { isOpen: boolean; onClose: () 
 export function AccountModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('profile');
   const { logout } = useAuthStore();
+  const [fontSize, setFontSize] = useState('中');
+  const [bubbleStyle, setBubbleStyle] = useState('微信风格');
+  const [notifyNewMsg, setNotifyNewMsg] = useState(true);
+  const [notifyCritical, setNotifyCritical] = useState(true);
+  const [notifySound, setNotifySound] = useState(false);
+  const [dndStart, setDndStart] = useState('22:00');
+  const [dndEnd, setDndEnd] = useState('07:00');
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="账号管理">
@@ -476,16 +483,17 @@ export function AccountModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             <div className="setting-row">
               <span className="setting-label">字体大小</span>
               <div className="setting-control">
-                <div className="setting-opt">小</div>
-                <div className="setting-opt selected">中</div>
-                <div className="setting-opt">大</div>
+                {['小', '中', '大'].map(v => (
+                  <div key={v} className={`setting-opt ${fontSize === v ? 'selected' : ''}`} onClick={() => setFontSize(v)}>{v}</div>
+                ))}
               </div>
             </div>
             <div className="setting-row">
               <span className="setting-label">消息气泡</span>
               <div className="setting-control">
-                <div className="setting-opt selected">微信风格</div>
-                <div className="setting-opt">简洁风格</div>
+                {['微信风格', '简洁风格'].map(v => (
+                  <div key={v} className={`setting-opt ${bubbleStyle === v ? 'selected' : ''}`} onClick={() => setBubbleStyle(v)}>{v}</div>
+                ))}
               </div>
             </div>
           </div>
@@ -493,28 +501,32 @@ export function AccountModal({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             <div className="setting-group-title">通知设置</div>
             <div className="setting-row">
               <span className="setting-label">新消息提醒</span>
-              <div className="toggle-switch active"><div className="knob"></div></div>
+              <div className={`toggle-switch ${notifyNewMsg ? 'active' : ''}`} onClick={() => setNotifyNewMsg(!notifyNewMsg)}><div className="knob"></div></div>
             </div>
             <div className="setting-row">
               <span className="setting-label">危急值推送</span>
-              <div className="toggle-switch active"><div className="knob"></div></div>
+              <div className={`toggle-switch ${notifyCritical ? 'active' : ''}`} onClick={() => setNotifyCritical(!notifyCritical)}><div className="knob"></div></div>
             </div>
             <div className="setting-row">
               <span className="setting-label">声音提醒</span>
-              <div className="toggle-switch"><div className="knob"></div></div>
+              <div className={`toggle-switch ${notifySound ? 'active' : ''}`} onClick={() => setNotifySound(!notifySound)}><div className="knob"></div></div>
             </div>
             <div className="setting-row">
               <span className="setting-label">夜间免打扰</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input className="setting-input" defaultValue="22:00" style={{ width: 70 }} />
+                <input className="setting-input" value={dndStart} onChange={e => setDndStart(e.target.value)} style={{ width: 70 }} />
                 <span>-</span>
-                <input className="setting-input" defaultValue="07:00" style={{ width: 70 }} />
+                <input className="setting-input" value={dndEnd} onChange={e => setDndEnd(e.target.value)} style={{ width: 70 }} />
               </div>
             </div>
           </div>
           <div className="modal-actions">
             <button className="modal-btn" onClick={onClose}>取消</button>
-            <button className="modal-btn primary" onClick={() => { onClose(); alert('个人设置已保存'); }}>保存设置</button>
+            <button className="modal-btn primary" onClick={() => {
+              localStorage.setItem('uiSettings', JSON.stringify({ fontSize, bubbleStyle, notifyNewMsg, notifyCritical, notifySound, dndStart, dndEnd }));
+              onClose();
+              alert('个人设置已保存');
+            }}>保存设置</button>
           </div>
         </div>
       )}

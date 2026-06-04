@@ -109,8 +109,7 @@ export default function ChatPanel() {
     if (actions[index]) actions[index]();
   }, [currentRichPatient, currentPatient]);
 
-  const handleToggleDarkMode = useCallback(() => { document.body.classList.toggle('dark-mode'); localStorage.setItem('darkMode', String(document.body.classList.contains('dark-mode'))); }, []);
-  const shortcutHandlers = useMemo(() => ({ onNewChat: handleNewChat, onSearch: handleFocusSearch, onQuickAction: handleQuickActionByIndex, onToggleDarkMode: handleToggleDarkMode }), [handleNewChat, handleFocusSearch, handleQuickActionByIndex, handleToggleDarkMode]);
+  const shortcutHandlers = useMemo(() => ({ onNewChat: handleNewChat, onSearch: handleFocusSearch, onQuickAction: handleQuickActionByIndex, onToggleDarkMode: () => {} }), [handleNewChat, handleFocusSearch, handleQuickActionByIndex]);
   useShortcuts(shortcutHandlers);
 
   useEffect(() => {
@@ -163,18 +162,29 @@ export default function ChatPanel() {
     const currentInput = inputText;
     setInputText('');
     setIsLoading(true);
+    const isTauri = !!(window as any).__TAURI__;
     try {
-      const response = await invoke<ApiResponse<string>>('ai_chat', { message: currentInput, patientContext: buildPatientContext(), history: buildHistory() });
-      if (response.success && response.data) {
-        const t2 = `${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`;
-        const aiMessageId = `msg_${Date.now()}_ai`;
-        newMessageIds.add(aiMessageId);
-        addStreamingMessage(response.data, { id: aiMessageId, conversation_id: `conv_${currentPatient.id}`, role: 'assistant', content: response.data, msg_type: 'ai', timestamp: t2, has_actions: true });
+      const t2 = `${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`;
+      const aiMessageId = `msg_${Date.now()}_ai`;
+      let aiContent = '';
+      if (isTauri) {
+        const response = await invoke<ApiResponse<string>>('ai_chat', { message: currentInput, patientContext: buildPatientContext(), history: buildHistory() });
+        if (response.success && response.data) {
+          aiContent = response.data;
+        } else {
+          aiContent = '<div class="ai-conclusion">已收到您的问题。</div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 继续观察患者病情变化<br>② 必要时完善相关检查</div></div>';
+        }
+      } else {
+        // Browser mode: simulate AI response
+        await new Promise(r => setTimeout(r, 800));
+        aiContent = `<div class="ai-conclusion">收到关于 ${currentPatient?.name || '患者'} 的咨询。</div><div class="ai-section"><div class="ai-section-title">分析</div><div class="ai-section-content">• ${currentInput}<br>• 当前病情需要持续关注</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 完善相关辅助检查<br>② 密切监测生命体征变化<br>③ 根据结果调整治疗方案</div></div><div style="font-size:10px;color:#94a3b8;margin-top:8px">⚠️ 演示模式，AI回复为模拟内容</div>`;
       }
+      newMessageIds.add(aiMessageId);
+      addStreamingMessage(aiContent, { id: aiMessageId, conversation_id: `conv_${currentPatient!.id}`, role: 'assistant', content: aiContent, msg_type: 'ai', timestamp: t2, has_actions: true });
     } catch (error) {
       console.error('AI chat error:', error);
       const t2 = `${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`;
-      addMessage({ id: `msg_${Date.now()}_err`, conversation_id: `conv_${currentPatient.id}`, role: 'assistant', content: '<div class="ai-risk">⚠️ AI响应失败</div>', msg_type: 'ai', timestamp: t2 });
+      addMessage({ id: `msg_${Date.now()}_err`, conversation_id: `conv_${currentPatient!.id}`, role: 'assistant', content: '<div class="ai-risk">⚠️ AI响应失败，请重试</div>', msg_type: 'ai', timestamp: t2 });
     } finally { setIsLoading(false); }
   };
 
@@ -296,10 +306,7 @@ export default function ChatPanel() {
           <span className="ch-dx">{currentPatient.diagnosis}</span>
           <span className="ch-meta">住院号: {currentPatient.admission_no} | {currentPatient.bed_number}</span>
         </div>
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <button className={`ch-refresh ${wardRoundMode ? 'active-ward-round' : ''}`} onClick={() => setWardRoundMode(!wardRoundMode)} title={wardRoundMode ? '查房模式已开启' : '查房模式'}>🏥</button>
-          <button className="ch-refresh" onClick={handleRefresh} title="刷新会话">🔄</button>
-        </div>
+        <button className="ch-text-btn" onClick={handleRefresh}>🔄 刷新</button>
       </div>
 
       <div className="chat-toolbar">
@@ -385,6 +392,9 @@ export default function ChatPanel() {
           <button className="quick-btn" onClick={() => setShowDiagnosis(true)}>AI诊断</button>
           <button className="quick-btn" onClick={() => setShowHandover(true)}>交班摘要</button>
           <button className="quick-btn" onClick={() => setShowDRG(true)}>DRG分析</button>
+          <button className={`quick-btn ${wardRoundMode ? 'ward-active' : ''}`} onClick={() => setWardRoundMode(!wardRoundMode)}>
+            {wardRoundMode ? '✓ 查房中' : '🏥 查房模式'}
+          </button>
         </div>
       </div>
 
