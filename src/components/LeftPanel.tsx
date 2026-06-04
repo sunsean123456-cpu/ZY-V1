@@ -161,17 +161,9 @@ export default function LeftPanel({
         <button className="assistant-btn" onClick={() => {
           usePatientStore.getState().setCurrentPatient(null);
           usePatientStore.getState().setCurrentRichPatient(null);
-          useChatStore.getState().setMessages([{
-            id: 'welcome_ai',
-            conversation_id: 'global',
-            role: 'assistant',
-            content: '<div class="ai-conclusion">您好，我是住院医生AI助手。</div><div class="ai-section"><div class="ai-section-title">我可以帮您</div><div class="ai-section-content">• 查询临床指南和诊疗规范<br>• 药物相互作用和剂量查询<br>• 检验结果解读和分析<br>• 病历书写和医嘱建议<br>• DRG/DIP 分组和费用分析</div></div><div class="ai-section"><div class="ai-section-title">使用方式</div><div class="ai-section-content">① 选择左侧患者进行针对性诊疗<br>② 或直接在此输入问题获取通用帮助</div></div>',
-            msg_type: 'ai',
-            timestamp: new Date().toTimeString().slice(0, 5),
-            has_actions: true,
-          }]);
+          useChatStore.getState().setMessages([]);
         }}>
-          <span className="ab-icon">🧠</span>
+          <span className="ab-icon">◆</span>
           智能助手
         </button>
       </div>

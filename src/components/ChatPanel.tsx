@@ -12,11 +12,15 @@ import {
   MedicalRecordModal, MedicalOrderModal, ConsultModal,
   TrendModal, HandoverModal, DRGModal, SettingsModal, UploadModal,
 } from './Modals';
-import type { Message, ApiResponse } from '../types';
+import type { Message, ApiResponse, RichPatientData } from '../types';
 
 const newMessageIds = new Set<string>();
 
-export default function ChatPanel() {
+interface ChatPanelProps {
+  switchPatient?: (p: RichPatientData) => void;
+}
+
+export default function ChatPanel({ switchPatient }: ChatPanelProps) {
   const { currentPatient, currentRichPatient } = usePatientStore();
   const { messages, addMessage, setMessages, isStreaming, addStreamingMessage } = useChatStore();
   const [inputText, setInputText] = useState('');
@@ -33,6 +37,10 @@ export default function ChatPanel() {
   const [showTextInput, setShowTextInput] = useState(false);
   const [textInputValue, setTextInputValue] = useState('');
   const [wardRoundMode, setWardRoundMode] = useState(false);
+  const [wardRoundTimer, setWardRoundTimer] = useState(0);
+  const [isWardRecording, setIsWardRecording] = useState(false);
+  const [wardRecordingText, setWardRecordingText] = useState('');
+  const [showWardConfirm, setShowWardConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [searchResults, setSearchResults] = useState<number[]>([]);
@@ -45,6 +53,91 @@ export default function ChatPanel() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const messageRefs = useRef<Map<number, HTMLElement>>(new Map());
+  const wardTimerRef = useRef<number | null>(null);
+  const wardRecordTimerRef = useRef<number | null>(null);
+
+  // Ward round timer
+  useEffect(() => {
+    if (wardRoundMode) {
+      setWardRoundTimer(0);
+      wardTimerRef.current = window.setInterval(() => {
+        setWardRoundTimer(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (wardTimerRef.current) {
+        clearInterval(wardTimerRef.current);
+        wardTimerRef.current = null;
+      }
+      setWardRoundTimer(0);
+    }
+    return () => {
+      if (wardTimerRef.current) {
+        clearInterval(wardTimerRef.current);
+      }
+    };
+  }, [wardRoundMode]);
+
+  const formatTimer = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const handleWardRecord = () => {
+    if (isWardRecording) return;
+    
+    setIsWardRecording(true);
+    setWardRecordingText('');
+    
+    // Simulate recording for 3 seconds
+    wardRecordTimerRef.current = window.setTimeout(() => {
+      setIsWardRecording(false);
+      // Simulated transcribed text
+      const mockTexts = [
+        '患者今日一般情况可，体温36.8℃，血压120/80mmHg，伤口愈合良好，无红肿渗出。',
+        '患者诉腹痛较前缓解，可进流质饮食，肠鸣音恢复，已排气。',
+        '患者神志清楚，精神可，双肺呼吸音清，未闻及干湿啰音。',
+        '患者生命体征平稳，引流管通畅，引流量较前减少，色淡红。',
+      ];
+      const randomText = mockTexts[Math.floor(Math.random() * mockTexts.length)];
+      setWardRecordingText(randomText);
+      setShowWardConfirm(true);
+    }, 3000);
+  };
+
+  const handleConfirmWardRecord = () => {
+    if (!wardRecordingText || !currentPatient) return;
+    
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    
+    addMessage({
+      id: `msg_${Date.now()}`,
+      conversation_id: `conv_${currentPatient.id}`,
+      role: 'user',
+      content: `【🎤 查房记录】${currentPatient.name} ${timeStr}\n${wardRecordingText}`,
+      msg_type: 'doctor',
+      timestamp: timeStr,
+    });
+    
+    setShowWardConfirm(false);
+    setWardRecordingText('');
+  };
+
+  const handleRerecord = () => {
+    setShowWardConfirm(false);
+    setWardRecordingText('');
+    handleWardRecord();
+  };
+
+  const handleNextPatient = () => {
+    if (!switchPatient) return;
+    
+    const { richPatients, currentRichPatient } = usePatientStore.getState();
+    const currentIndex = richPatients.findIndex(p => p.id === currentRichPatient?.id);
+    const nextIndex = (currentIndex + 1) % richPatients.length;
+    switchPatient(richPatients[nextIndex]);
+  };
 
   const onSpeechResult = useCallback((text: string) => {
     if (!currentPatient) return;
@@ -300,6 +393,20 @@ export default function ChatPanel() {
 
   return (
     <div className="chat-panel">
+      {/* Ward round mode banner */}
+      {wardRoundMode && (
+        <div className="ward-round-banner">
+          <div className="ward-round-info">
+            <span className="ward-round-icon">🏥</span>
+            <span className="ward-round-title">查房模式</span>
+            <span className="ward-round-timer">{formatTimer(wardRoundTimer)}</span>
+          </div>
+          <button className="ward-round-next-btn" onClick={handleNextPatient}>
+            下一位 ▶
+          </button>
+        </div>
+      )}
+
       <div className="chat-header">
         <div className="ch-left">
           <span className="ch-name">{currentPatient.name}</span>
@@ -368,21 +475,41 @@ export default function ChatPanel() {
       </div>
 
       <div className="input-area">
-        <div className="input-row" style={{ position: 'relative' }}>
-          <button className="icon-btn" onClick={() => setShowUploadMenu(!showUploadMenu)} title="上传资料">📎</button>
-          {showUploadMenu && (
-            <div className="upload-menu open">
-              <div className="upload-item" onClick={() => handleUpload('photo')}><span className="ui-icon">📷</span> 拍照上传</div>
-              <div className="upload-item" onClick={() => handleUpload('image')}><span className="ui-icon">🖼️</span> 上传图片</div>
-              <div className="upload-item" onClick={() => handleUpload('voice')}><span className="ui-icon">🎤</span> 语音输入</div>
-              <div className="upload-item" onClick={() => handleUpload('text')}><span className="ui-icon">⌨️</span> 文字输入</div>
-              <div className="upload-item" onClick={() => handleUpload('file')}><span className="ui-icon">📁</span> 文件导入</div>
+        {wardRoundMode ? (
+          // Ward round mode: big recording button
+          <div className="ward-record-container">
+            {isWardRecording ? (
+              <div className="ward-recording-indicator">
+                <div className="ward-recording-pulse"></div>
+                <span>录音中...</span>
+              </div>
+            ) : (
+              <button className="ward-record-btn" onClick={handleWardRecord}>
+                <span className="ward-record-icon">🎤</span>
+                <span>按住说话</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          // Normal mode: regular input
+          <>
+            <div className="input-row" style={{ position: 'relative' }}>
+              <button className="icon-btn" onClick={() => setShowUploadMenu(!showUploadMenu)} title="上传资料">📎</button>
+              {showUploadMenu && (
+                <div className="upload-menu open">
+                  <div className="upload-item" onClick={() => handleUpload('photo')}><span className="ui-icon">📷</span> 拍照上传</div>
+                  <div className="upload-item" onClick={() => handleUpload('image')}><span className="ui-icon">🖼️</span> 上传图片</div>
+                  <div className="upload-item" onClick={() => handleUpload('voice')}><span className="ui-icon">🎤</span> 语音输入</div>
+                  <div className="upload-item" onClick={() => handleUpload('text')}><span className="ui-icon">⌨️</span> 文字输入</div>
+                  <div className="upload-item" onClick={() => handleUpload('file')}><span className="ui-icon">📁</span> 文件导入</div>
+                </div>
+              )}
+              <button className={`icon-btn ${isRecording ? 'recording' : ''}`} onClick={handleToggleRecording} title={isRecording ? '录音中...点击停止' : '语音输入'}>🎤</button>
+              <textarea ref={textareaRef} value={inputText} onChange={e => { setInputText(e.target.value); handleTextareaResize(); }} onKeyDown={handleKeyDown} placeholder={wardRoundMode ? '查房模式：语音自动格式化...' : '输入消息...'} rows={1} />
+              <button className="send-btn" onClick={handleSend} disabled={isLoading || isStreaming}>📤</button>
             </div>
-          )}
-          <button className={`icon-btn ${isRecording ? 'recording' : ''}`} onClick={handleToggleRecording} title={isRecording ? '录音中...点击停止' : '语音输入'}>🎤</button>
-          <textarea ref={textareaRef} value={inputText} onChange={e => { setInputText(e.target.value); handleTextareaResize(); }} onKeyDown={handleKeyDown} placeholder={wardRoundMode ? '查房模式：语音自动格式化...' : '输入消息...'} rows={1} />
-          <button className="send-btn" onClick={handleSend} disabled={isLoading || isStreaming}>📤</button>
-        </div>
+          </>
+        )}
         <div className="quick-bar">
           <button className="quick-btn" onClick={() => setShowRecord(true)}>生成病历</button>
           <button className="quick-btn" onClick={() => setShowOrder(true)}>开单建议</button>
@@ -397,6 +524,22 @@ export default function ChatPanel() {
           </button>
         </div>
       </div>
+
+      {/* Ward round recording confirmation */}
+      {showWardConfirm && (
+        <div className="ward-confirm-overlay" onClick={e => e.target === e.currentTarget && setShowWardConfirm(false)}>
+          <div className="ward-confirm-card">
+            <div className="ward-confirm-header">
+              <span>📝 查房记录确认</span>
+            </div>
+            <div className="ward-confirm-text">{wardRecordingText}</div>
+            <div className="ward-confirm-actions">
+              <button className="ward-confirm-btn cancel" onClick={handleRerecord}>重录</button>
+              <button className="ward-confirm-btn confirm" onClick={handleConfirmWardRecord}>确认</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showTextInput && (
         <div className="modal-overlay open" onClick={e => e.target === e.currentTarget && setShowTextInput(false)}>

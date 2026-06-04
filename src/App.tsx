@@ -8,6 +8,7 @@ import LoginOverlay from './components/LoginOverlay';
 import TitleBar from './components/TitleBar';
 import LeftPanel from './components/LeftPanel';
 import ChatPanel from './components/ChatPanel';
+import GeneralAssistant from './components/GeneralAssistant';
 import type { Patient, ApiResponse } from './types';
 import './styles/chat.css';
 import './styles/modals.css';
@@ -15,7 +16,7 @@ import './styles/dark.css';
 
 function App() {
   const { isLoggedIn } = useAuthStore();
-  const { setPatients, setCurrentPatient, setRichPatients, setCurrentRichPatient } = usePatientStore();
+  const { currentPatient, setPatients, setCurrentPatient, setRichPatients, setCurrentRichPatient } = usePatientStore();
   const { setMessages } = useChatStore();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
@@ -186,7 +187,7 @@ function App() {
           showUpload={showUpload}
           setShowUpload={setShowUpload}
         />
-        <ChatPanel />
+        {currentPatient ? <ChatPanel switchPatient={switchPatient} /> : <GeneralAssistant />}
       </div>
     </div>
   );

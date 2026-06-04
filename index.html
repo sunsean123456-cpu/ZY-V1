@@ -1,114 +1,20 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
+    <script type="module">import { injectIntoGlobalHook } from "/@react-refresh";
+injectIntoGlobalHook(window);
+window.$RefreshReg$ = () => {};
+window.$RefreshSig$ = () => (type) => type;</script>
+    <script type="module" src="/@vite/client"></script>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>住院医生AI助手 v8 - 诊断</title>
-    <style>
-      body { margin: 0; padding: 20px; font-family: -apple-system, sans-serif; background: #f0f2f5; }
-      h2 { color: #1e293b; }
-      .step { margin: 10px 0; padding: 10px; border-radius: 8px; font-size: 14px; }
-      .ok { background: #dcfce7; color: #166534; }
-      .fail { background: #fee2e2; color: #991b1b; }
-      .pending { background: #fef3c7; color: #92400e; }
-      .info { background: #e0f2fe; color: #0c4a6e; }
-      pre { font-size: 12px; word-break: break-all; white-space: pre-wrap; }
-    </style>
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#1a2332" />
+    <title>住院医生AI助手 v8</title>
   </head>
   <body>
-    <h2>🔧 Tauri 逐步诊断</h2>
-    <div id="steps"></div>
-    <script>
-      const steps = document.getElementById('steps');
-      function log(msg, cls) {
-        const div = document.createElement('div');
-        div.className = 'step ' + cls;
-        div.innerHTML = msg;
-        steps.appendChild(div);
-      }
-
-      log('✅ Step 1: HTML 渲染正常', 'ok');
-      log('📍 URL: ' + window.location.href, 'info');
-      log('🌐 Protocol: ' + window.location.protocol, 'info');
-
-      // Test Tauri bridge
-      const hasTauri = !!(window.__TAURI__);
-      log('Step 2: __TAURI__ = ' + hasTauri, hasTauri ? 'ok' : 'fail');
-      if (hasTauri) {
-        log('  __TAURI__ keys: ' + Object.keys(window.__TAURI__).join(', '), 'info');
-      }
-
-      // Test basic JS
-      try {
-        eval('const x = 1 + 1;');
-        log('✅ Step 3: JS eval 正常', 'ok');
-      } catch(e) {
-        log('❌ Step 3: JS eval 失败: ' + e.message, 'fail');
-      }
-
-      // Test optional chaining
-      try {
-        eval('const obj = {a:{b:1}}; const v = obj?.a?.b;');
-        log('✅ Step 4: Optional chaining (?.) 正常', 'ok');
-      } catch(e) {
-        log('❌ Step 4: Optional chaining 不支持: ' + e.message, 'fail');
-      }
-
-      // Test nullish coalescing
-      try {
-        eval('const v = null ?? "default";');
-        log('✅ Step 5: Nullish coalescing (??) 正常', 'ok');
-      } catch(e) {
-        log('❌ Step 5: Nullish coalescing 不支持: ' + e.message, 'fail');
-      }
-
-      // Now try loading the React app
-      log('⏳ Step 6: 正在加载 React 应用...', 'pending');
-    </script>
-    <script type="module">
-      const steps = document.getElementById('steps');
-      function log(msg, cls) {
-        const div = document.createElement('div');
-        div.className = 'step ' + cls;
-        div.innerHTML = msg;
-        steps.appendChild(div);
-      }
-
-      try {
-        // Load React
-        const React = await import('react');
-        log('✅ Step 7: React 加载成功 (v' + React.default.version + ')', 'ok');
-
-        const ReactDOM = await import('react-dom/client');
-        log('✅ Step 8: ReactDOM 加载成功', 'ok');
-
-        // Try loading each store/module
-        const patientStore = await import('./src/stores/patientStore.ts');
-        log('✅ Step 9: patientStore 加载成功', 'ok');
-
-        const chatStore = await import('./src/stores/chatStore.ts');
-        log('✅ Step 10: chatStore 加载成功', 'ok');
-
-        const authStore = await import('./src/stores/authStore.ts');
-        log('✅ Step 11: authStore 加载成功', 'ok');
-
-        const App = await import('./src/App.tsx');
-        log('✅ Step 12: App 组件加载成功', 'ok');
-
-        // Mount the app
-        const root = ReactDOM.default.createRoot(document.getElementById('root') || (() => {
-          const d = document.createElement('div');
-          d.id = 'root';
-          document.body.appendChild(d);
-          return d;
-        })());
-        root.render(React.default.createElement(App.default));
-        log('✅ Step 13: App 渲染成功！应用已启动。', 'ok');
-
-      } catch(e) {
-        log('❌ 加载失败: ' + e.message, 'fail');
-        log('<pre>' + (e.stack || 'No stack') + '</pre>', 'fail');
-      }
-    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
