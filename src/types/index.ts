@@ -26,6 +26,8 @@ export interface Message {
   msg_type: 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult';
   timestamp: string;
   suggestions?: string;
+  has_actions?: boolean;
+  is_risk?: boolean;
 }
 
 export interface MedicalRecord {
@@ -49,4 +51,57 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
+}
+
+// Rich patient data types for frontend
+export interface ChatMessage {
+  type: 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult';
+  text: string;
+  time: string;
+  actions?: boolean;
+  isRisk?: boolean;
+}
+
+export interface OrderItem {
+  name: string;
+  detail: string;
+  checked?: boolean;
+}
+
+export interface ConsultItem {
+  dept: string;
+  content: string;
+}
+
+export interface TrendData {
+  wbc: number[];
+  crp: number[];
+  neut: number[];
+}
+
+export interface RichPatientData {
+  id: string;
+  name: string;
+  sex: string;
+  age: number;
+  bed: string;
+  admission: string;
+  dx: string;
+  status: string;
+  group: string;
+  surgeryType: string;
+  initialMsgs: ChatMessage[];
+  pushSequence: ChatMessage[];
+  record: string;
+  orders: OrderItem[];
+  consult: ConsultItem[];
+  trends: TrendData;
+  drg?: {
+    group: string;
+    weight: number;
+    estimatedCost: number;
+    usedCost: number;
+    risk: string;
+    suggestions: string[];
+  };
 }

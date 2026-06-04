@@ -1,15 +1,14 @@
-import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { AccountModal } from './Modals';
 
 interface TitleBarProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  showAccount: boolean;
+  setShowAccount: (show: boolean) => void;
 }
 
-export default function TitleBar({ isCollapsed, onToggleCollapse }: TitleBarProps) {
-  const [showAccount, setShowAccount] = useState(false);
-
+export default function TitleBar({ isCollapsed, onToggleCollapse, showAccount, setShowAccount }: TitleBarProps) {
   const handleMinimize = () => invoke('minimize_window');
   const handleMaximize = () => invoke('maximize_window');
   const handleClose = () => invoke('close_window');

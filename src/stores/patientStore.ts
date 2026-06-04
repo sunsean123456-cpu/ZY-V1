@@ -1,11 +1,15 @@
 import { create } from 'zustand';
-import type { Patient } from '../types';
+import type { Patient, RichPatientData } from '../types';
 
 interface PatientStore {
   patients: Patient[];
+  richPatients: RichPatientData[];
   currentPatient: Patient | null;
+  currentRichPatient: RichPatientData | null;
   setPatients: (patients: Patient[]) => void;
+  setRichPatients: (patients: RichPatientData[]) => void;
   setCurrentPatient: (patient: Patient | null) => void;
+  setCurrentRichPatient: (patient: RichPatientData | null) => void;
   addPatient: (patient: Patient) => void;
   updatePatient: (id: string, updates: Partial<Patient>) => void;
   deletePatient: (id: string) => void;
@@ -13,11 +17,17 @@ interface PatientStore {
 
 export const usePatientStore = create<PatientStore>((set) => ({
   patients: [],
+  richPatients: [],
   currentPatient: null,
+  currentRichPatient: null,
   
   setPatients: (patients) => set({ patients }),
   
+  setRichPatients: (richPatients) => set({ richPatients }),
+  
   setCurrentPatient: (patient) => set({ currentPatient: patient }),
+  
+  setCurrentRichPatient: (currentRichPatient) => set({ currentRichPatient }),
   
   addPatient: (patient) => set((state) => ({
     patients: [...state.patients, patient]
