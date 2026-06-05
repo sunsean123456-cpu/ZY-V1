@@ -9,7 +9,32 @@
     <title>住院医生AI助手 v8</title>
   </head>
   <body>
+    <div id="loading-indicator" style="position:fixed;inset:0;background:#1a1a2e;display:flex;align-items:center;justify-content:center;z-index:99999;color:#fff;font-family:sans-serif;font-size:18px">
+      <div style="text-align:center">
+        <div style="font-size:48px">🤖</div>
+        <div style="margin-top:12px">加载中...</div>
+      </div>
+    </div>
     <div id="root"></div>
+    <script>
+      // Remove loading indicator once React mounts
+      const observer = new MutationObserver(() => {
+        const root = document.getElementById('root');
+        if (root && root.children.length > 0) {
+          const loader = document.getElementById('loading-indicator');
+          if (loader) loader.remove();
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.getElementById('root'), { childList: true });
+      // Fallback: remove after 10s
+      setTimeout(() => {
+        const loader = document.getElementById('loading-indicator');
+        if (loader) {
+          loader.innerHTML = '<div style="text-align:center;color:#ef4444"><div style="font-size:48px">❌</div><div style="margin-top:12px">React 未能挂载</div><div style="font-size:12px;color:#94a3b8;margin-top:8px">请检查控制台错误</div></div>';
+        }
+      }, 10000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

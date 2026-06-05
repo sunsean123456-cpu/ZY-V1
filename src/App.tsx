@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useAuthStore } from './stores/authStore';
 import { usePatientStore } from './stores/patientStore';
@@ -12,6 +12,35 @@ import type { Patient, ApiResponse } from './types';
 import './styles/chat.css';
 import './styles/modals.css';
 import './styles/dark.css';
+
+// Per-component error boundary
+class ComponentGuard extends React.Component<
+  { name: string; children: React.ReactNode },
+  { hasError: boolean; error: string }
+> {
+  constructor(props: { name: string; children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message + '\n' + (error.stack || '').slice(0, 300) };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(`[ZY] ComponentGuard "${this.props.name}" caught:`, error, info);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 16, background: '#7f1d1d', color: '#fff', fontSize: 11, fontFamily: 'monospace', flex: 1, overflow: 'auto' }}>
+          <h3 style={{ color: '#fbbf24', marginBottom: 8 }}>❌ {this.props.name} 崩溃</h3>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 10 }}>{this.state.error}</pre>
+          <button onClick={() => this.setState({ hasError: false, error: '' })} style={{ marginTop: 8, padding: '4px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>重试</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const { isLoggedIn } = useAuthStore();
@@ -27,109 +56,70 @@ function App() {
   });
 
   useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-mode');
-    } else {
-      document.body.classList.remove('dark-mode');
-    }
+    if (isDarkMode) document.body.classList.add('dark-mode');
+    else document.body.classList.remove('dark-mode');
     localStorage.setItem('darkMode', String(isDarkMode));
   }, [isDarkMode]);
 
   const toggleDarkMode = () => setIsDarkMode(!isDarkMode);
 
   useEffect(() => {
-    if (isLoggedIn) {
-      loadPatients();
-    }
+    if (isLoggedIn) loadPatients();
   }, [isLoggedIn]);
 
   const loadPatients = async () => {
-    // Load rich patient data into store
     setRichPatients(patientsData);
-
-    // Also try to load from backend
     try {
       const response = await invoke<ApiResponse<Patient[]>>('get_all_patients');
       if (response.success && response.data && response.data.length > 0) {
         setPatients(response.data);
       } else {
-        // Map rich data to Patient format for backend compat
         const mapped: Patient[] = patientsData.map(p => ({
-          id: p.id,
-          name: p.name,
-          bed_number: p.bed,
-          gender: p.sex,
-          age: p.age,
-          diagnosis: p.dx,
-          admission_date: '2026-05-27',
-          admission_no: p.admission,
-          status: p.status,
-          group_type: p.group,
+          id: p.id, name: p.name, bed_number: p.bed, gender: p.sex, age: p.age,
+          diagnosis: p.dx, admission_date: '2026-05-27', admission_no: p.admission,
+          status: p.status, group_type: p.group,
         }));
         setPatients(mapped);
       }
-    } catch {
-      // Backend may not be ready; use rich data directly
+    } catch (e) {
+      console.warn('[ZY] Backend not available:', e);
       const mapped: Patient[] = patientsData.map(p => ({
-        id: p.id,
-        name: p.name,
-        bed_number: p.bed,
-        gender: p.sex,
-        age: p.age,
-        diagnosis: p.dx,
-        admission_date: '2026-05-27',
-        admission_no: p.admission,
-        status: p.status,
-        group_type: p.group,
+        id: p.id, name: p.name, bed_number: p.bed, gender: p.sex, age: p.age,
+        diagnosis: p.dx, admission_date: '2026-05-27', admission_no: p.admission,
+        status: p.status, group_type: p.group,
       }));
       setPatients(mapped);
     }
 
-    // Set first patient as current
     const firstRich = patientsData[0];
     if (firstRich) {
       setCurrentRichPatient(firstRich);
       setCurrentPatient({
-        id: firstRich.id,
-        name: firstRich.name,
-        bed_number: firstRich.bed,
-        gender: firstRich.sex,
-        age: firstRich.age,
-        diagnosis: firstRich.dx,
-        admission_date: '2026-05-27',
-        admission_no: firstRich.admission,
-        status: firstRich.status,
-        group_type: firstRich.group,
+        id: firstRich.id, name: firstRich.name, bed_number: firstRich.bed,
+        gender: firstRich.sex, age: firstRich.age, diagnosis: firstRich.dx,
+        admission_date: '2026-05-27', admission_no: firstRich.admission,
+        status: firstRich.status, group_type: firstRich.group,
       });
-
-      // Load initial messages for first patient
       const initialMsgs = firstRich.initialMsgs.map((m, i) => ({
         id: `init_${firstRich.id}_${i}`,
         conversation_id: `conv_${firstRich.id}`,
-        role: m.type === 'doctor' ? 'user' : 'assistant',
+        role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
         content: m.text,
         msg_type: m.type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
-        timestamp: m.time,
-        has_actions: m.actions,
-        is_risk: m.isRisk,
+        timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
       }));
       setMessages(initialMsgs);
-
-      // Schedule push sequence
       let delay = 2000;
       firstRich.pushSequence.forEach((m, i) => {
         setTimeout(() => {
-          const pushMsg = {
+          useChatStore.getState().addMessage({
             id: `push_${firstRich.id}_${i}_${Date.now()}`,
             conversation_id: `conv_${firstRich.id}`,
-            role: m.type === 'doctor' ? 'user' : 'assistant',
+            role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
             content: m.text,
             msg_type: m.type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
-            timestamp: m.time,
-            has_actions: m.actions,
-            is_risk: m.isRisk,
-          };
-          useChatStore.getState().addMessage(pushMsg);
+            timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
+          });
         }, delay);
         delay += 2500;
       });
@@ -139,46 +129,31 @@ function App() {
   const switchPatient = (richPatient: typeof patientsData[0]) => {
     setCurrentRichPatient(richPatient);
     setCurrentPatient({
-      id: richPatient.id,
-      name: richPatient.name,
-      bed_number: richPatient.bed,
-      gender: richPatient.sex,
-      age: richPatient.age,
-      diagnosis: richPatient.dx,
-      admission_date: '2026-05-27',
-      admission_no: richPatient.admission,
-      status: richPatient.status,
-      group_type: richPatient.group,
+      id: richPatient.id, name: richPatient.name, bed_number: richPatient.bed,
+      gender: richPatient.sex, age: richPatient.age, diagnosis: richPatient.dx,
+      admission_date: '2026-05-27', admission_no: richPatient.admission,
+      status: richPatient.status, group_type: richPatient.group,
     });
-
-    // Load initial messages
     const initialMsgs = richPatient.initialMsgs.map((m, i) => ({
       id: `init_${richPatient.id}_${i}`,
       conversation_id: `conv_${richPatient.id}`,
-      role: m.type === 'doctor' ? 'user' : 'assistant',
+      role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
       content: m.text,
       msg_type: m.type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
-      timestamp: m.time,
-      has_actions: m.actions,
-      is_risk: m.isRisk,
+      timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
     }));
     setMessages(initialMsgs);
-
-    // Schedule push sequence
     let delay = 2000;
     richPatient.pushSequence.forEach((m, i) => {
       setTimeout(() => {
-        const pushMsg = {
+        useChatStore.getState().addMessage({
           id: `push_${richPatient.id}_${i}_${Date.now()}`,
           conversation_id: `conv_${richPatient.id}`,
-          role: m.type === 'doctor' ? 'user' : 'assistant',
+          role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
           content: m.text,
           msg_type: m.type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
-          timestamp: m.time,
-          has_actions: m.actions,
-          is_risk: m.isRisk,
-        };
-        useChatStore.getState().addMessage(pushMsg);
+          timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
+        });
       }, delay);
       delay += 2500;
     });
@@ -190,24 +165,30 @@ function App() {
 
   return (
     <div className={`app-window ${isCollapsed ? 'collapsed' : ''}`}>
-      <TitleBar
-        isCollapsed={isCollapsed}
-        onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
-        showAccount={showAccount}
-        setShowAccount={setShowAccount}
-        isDarkMode={isDarkMode}
-        onToggleDarkMode={toggleDarkMode}
-      />
-      <div className="app-body">
-        <LeftPanel
+      <ComponentGuard name="TitleBar">
+        <TitleBar
           isCollapsed={isCollapsed}
-          switchPatient={switchPatient}
-          showSettings={showSettings}
-          setShowSettings={setShowSettings}
-          showUpload={showUpload}
-          setShowUpload={setShowUpload}
+          onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+          showAccount={showAccount}
+          setShowAccount={setShowAccount}
+          isDarkMode={isDarkMode}
+          onToggleDarkMode={toggleDarkMode}
         />
-        <ChatPanel />
+      </ComponentGuard>
+      <div className="app-body">
+        <ComponentGuard name="LeftPanel">
+          <LeftPanel
+            isCollapsed={isCollapsed}
+            switchPatient={switchPatient}
+            showSettings={showSettings}
+            setShowSettings={setShowSettings}
+            showUpload={showUpload}
+            setShowUpload={setShowUpload}
+          />
+        </ComponentGuard>
+        <ComponentGuard name="ChatPanel">
+          <ChatPanel />
+        </ComponentGuard>
       </div>
     </div>
   );

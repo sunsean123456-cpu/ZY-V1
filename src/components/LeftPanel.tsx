@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Virtuoso } from 'react-virtuoso';
 import { usePatientStore } from '../stores/patientStore';
 import type { RichPatientData } from '../types';
@@ -73,7 +73,7 @@ export default function LeftPanel({
         {!expanded ? null : groupPatients.length > 20 ? (
           <Virtuoso
             data={groupPatients}
-            itemContent={(index, patient) => (
+            itemContent={(_index, patient) => (
               <div
                 key={patient.id}
                 className={`patient-item ${currentRichPatient?.id === patient.id ? 'active' : ''}`}

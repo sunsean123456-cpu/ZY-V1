@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import ReactECharts from 'echarts-for-react';
 import { useAuthStore } from '../stores/authStore';
 import type { RichPatientData } from '../types';
@@ -33,14 +34,43 @@ function Modal({ isOpen, onClose, title, children }: ModalProps) {
 export function MedicalRecordModal({ isOpen, onClose, patient }: {
   isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
 }) {
+  const [recordContent, setRecordContent] = useState('');
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && patient) {
+      setRecordContent(patient.record);
+      generateAIRecord();
+    }
+  }, [isOpen, patient]);
+
+  const generateAIRecord = async () => {
+    if (!patient) return;
+    setGenerating(true);
+    try {
+      const patientInfo = `患者：${patient.name}，${patient.sex}，${patient.age}岁\n床号：${patient.bed}\n诊断：${patient.dx}\n手术/状态：${patient.surgeryType}\n检验趋势：WBC ${patient.trends.wbc[6]}, CRP ${patient.trends.crp[6]}, NEUT% ${patient.trends.neut[6]}`;
+      const aiRecord = await invoke<string>('ai_generate_record', {
+        patientContext: patientInfo,
+        recordType: 'admission',
+      });
+      if (aiRecord) setRecordContent(aiRecord);
+    } catch (_err) {
+      // Keep default record content
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   if (!patient) return null;
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="住院病历预览">
-      <div className="record-preview" dangerouslySetInnerHTML={{ __html: patient.record }} />
+      {generating && <div style={{textAlign:'center',padding:12,color:'#64748b'}}>🔄 AI正在生成病历...</div>}
+      <div className="record-preview" dangerouslySetInnerHTML={{ __html: recordContent }} />
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>取消</button>
+        <button className="modal-btn" onClick={generateAIRecord}>{generating ? '生成中...' : '🔄 AI重新生成'}</button>
         <button className="modal-btn" onClick={() => { onClose(); alert('请在对话框中输入修改意见'); }}>修改</button>
-        <button className="modal-btn" onClick={() => { exportMedicalRecord(patient.record, patient.name); }}>导出PDF</button>
+        <button className="modal-btn" onClick={() => { exportMedicalRecord(recordContent, patient.name); }}>导出PDF</button>
         <button className="modal-btn primary" onClick={() => { onClose(); alert('病历已提交至HIS系统'); }}>确认提交</button>
       </div>
     </Modal>
@@ -52,12 +82,37 @@ export function MedicalOrderModal({ isOpen, onClose, patient }: {
   isOpen: boolean; onClose: () => void; patient: RichPatientData | null;
 }) {
   const [checkedOrders, setCheckedOrders] = useState<Set<number>>(new Set());
+  const [orders, setOrders] = useState<{name: string; detail: string}[]>([]);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     if (isOpen && patient) {
+      setOrders(patient.orders);
       setCheckedOrders(new Set(patient.orders.map((_, i) => i)));
+      generateAIOrders();
     }
   }, [isOpen, patient]);
+
+  const generateAIOrders = async () => {
+    if (!patient) return;
+    setGenerating(true);
+    try {
+      const patientInfo = `患者：${patient.name}，${patient.sex}，${patient.age}岁\n诊断：${patient.dx}\n检验趋势：WBC ${patient.trends.wbc[6]}, CRP ${patient.trends.crp[6]}`;
+      const aiResult = await invoke<string>('ai_generate_orders', { patientContext: patientInfo });
+      if (aiResult) {
+        try {
+          const jsonMatch = aiResult.match(/\[[\s\S]*\]/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]) as {name: string; detail: string}[];
+            if (parsed.length > 0) {
+              setOrders(parsed);
+              setCheckedOrders(new Set(parsed.map((_, i) => i)));
+            }
+          }
+        } catch { /* keep default orders */ }
+      }
+    } catch { /* keep default orders */ } finally { setGenerating(false); }
+  };
 
   if (!patient) return null;
 
@@ -72,8 +127,9 @@ export function MedicalOrderModal({ isOpen, onClose, patient }: {
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="检查/医嘱建议">
+      {generating && <div style={{textAlign:'center',padding:12,color:'#64748b'}}>🔄 AI正在生成医嘱建议...</div>}
       <div className="order-preview">
-        {patient.orders.map((o, i) => (
+        {orders.map((o, i) => (
           <div key={i} className="order-item" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }} onClick={() => toggleOrder(i)}>
             <input type="checkbox" checked={checkedOrders.has(i)} onChange={() => toggleOrder(i)} style={{ marginTop: 2 }} />
             <div>
@@ -85,9 +141,10 @@ export function MedicalOrderModal({ isOpen, onClose, patient }: {
       </div>
       <div className="modal-actions">
         <button className="modal-btn" onClick={onClose}>取消</button>
+        <button className="modal-btn" onClick={generateAIOrders}>{generating ? '生成中...' : '🔄 AI重新生成'}</button>
         <button className="modal-btn" onClick={() => { onClose(); alert('请在对话框中输入修改意见'); }}>修改</button>
         <button className="modal-btn" onClick={() => { 
-          const selected = patient.orders.filter((_, i) => checkedOrders.has(i));
+          const selected = orders.filter((_, i) => checkedOrders.has(i));
           exportOrderList(selected, patient.name); 
         }}>导出PDF</button>
         <button className="modal-btn primary" onClick={() => { onClose(); alert(`已提交 ${checkedOrders.size} 条医嘱至HIS系统`); }}>确认提交</button>

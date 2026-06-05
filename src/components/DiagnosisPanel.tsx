@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { RichPatientData, ApiResponse } from '../types';
+import type { RichPatientData } from '../types';
 
 interface DiagnosisItem {
   name: string;
@@ -81,23 +81,22 @@ export default function DiagnosisPanel({ isOpen, onClose, patient }: DiagnosisPa
       // Try AI-generated diagnoses
       const patientInfo = `患者：${patient.name}，${patient.sex}，${patient.age}岁\n诊断：${patient.dx}\n手术/状态：${patient.surgeryType}\n检验趋势：WBC ${patient.trends.wbc[6]}, CRP ${patient.trends.crp[6]}, NEUT% ${patient.trends.neut[6]}`;
       
-      const response = await invoke<ApiResponse<string>>('ai_chat', {
+      const response = await invoke<string>('ai_chat', {
         message: `请根据以下患者信息生成鉴别诊断列表，每个诊断包含名称、概率(0-100)、支持证据(3-4条)、建议检查(2-3条)。以JSON数组格式返回：[{"name":"","probability":0,"evidence":[],"actions":[]}]`,
         patientContext: patientInfo,
         history: [],
       });
 
-      if (response.success && response.data) {
+      if (response) {
         try {
-          // Try to parse JSON from AI response
-          const jsonMatch = response.data.match(/\[[\s\S]*\]/);
+          const jsonMatch = response.match(/\[[\s\S]*\]/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]) as DiagnosisItem[];
             setDiagnoses(parsed);
             setLoading(false);
             return;
           }
-        } catch (parseErr) {
+        } catch (_parseErr) {
           // Fallback to local generation
         }
       }

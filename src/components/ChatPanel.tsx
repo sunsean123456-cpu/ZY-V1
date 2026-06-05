@@ -12,7 +12,7 @@ import {
   MedicalRecordModal, MedicalOrderModal, ConsultModal,
   TrendModal, HandoverModal, DRGModal, SettingsModal, UploadModal,
 } from './Modals';
-import type { Message, ApiResponse } from '../types';
+import type { Message } from '../types';
 
 const newMessageIds = new Set<string>();
 
@@ -164,12 +164,12 @@ export default function ChatPanel() {
     setInputText('');
     setIsLoading(true);
     try {
-      const response = await invoke<ApiResponse<string>>('ai_chat', { message: currentInput, patientContext: buildPatientContext(), history: buildHistory() });
-      if (response.success && response.data) {
+      const aiResponse = await invoke<string>('ai_chat', { message: currentInput, patientContext: buildPatientContext(), history: buildHistory() });
+      if (aiResponse) {
         const t2 = `${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`;
         const aiMessageId = `msg_${Date.now()}_ai`;
         newMessageIds.add(aiMessageId);
-        addStreamingMessage(response.data, { id: aiMessageId, conversation_id: `conv_${currentPatient.id}`, role: 'assistant', content: response.data, msg_type: 'ai', timestamp: t2, has_actions: true });
+        addStreamingMessage(aiResponse, { id: aiMessageId, conversation_id: `conv_${currentPatient.id}`, role: 'assistant', content: aiResponse, msg_type: 'ai', timestamp: t2, has_actions: true });
       }
     } catch (error) {
       console.error('AI chat error:', error);
@@ -187,15 +187,26 @@ export default function ChatPanel() {
     else if (action === 'orders') setShowOrder(true);
   };
 
-  const handleQuickAction = (type: string) => {
-    if (!currentRichPatient) return;
+  const handleQuickAction = async (type: string) => {
+    if (!currentRichPatient || !currentPatient) return;
     const now = new Date();
     const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    addMessage({ id: `msg_${Date.now()}`, conversation_id: `conv_${currentPatient?.id}`, role: 'user', content: `请${type}`, msg_type: 'doctor', timestamp: timeStr });
-    setTimeout(() => {
+    addMessage({ id: `msg_${Date.now()}`, conversation_id: `conv_${currentPatient.id}`, role: 'user', content: `请${type}`, msg_type: 'doctor', timestamp: timeStr });
+    setIsLoading(true);
+    try {
+      const patientInfo = `患者：${currentRichPatient.name}，${currentRichPatient.sex}，${currentRichPatient.age}岁\n床号：${currentRichPatient.bed}\n诊断：${currentRichPatient.dx}\n检验趋势：WBC ${currentRichPatient.trends.wbc[6]}, CRP ${currentRichPatient.trends.crp[6]}, NEUT% ${currentRichPatient.trends.neut[6]}`;
+      const aiResponse = await invoke<string>('ai_chat', {
+        message: `请对以下住院患者进行${type}分析，包含：1)关键发现 2)风险评估 3)具体建议。返回结构化HTML格式。`,
+        patientContext: patientInfo,
+        history: [],
+      });
       const t2 = `${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`;
-      addMessage({ id: `msg_${Date.now()}_ai`, conversation_id: `conv_${currentPatient?.id}`, role: 'assistant', content: `<div class="ai-conclusion">${currentRichPatient.name}${type}完成。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 当前病情稳定，建议继续当前治疗方案<br>• 关注感染指标变化趋势</div></div><div class="ai-section"><div class="ai-section-title">建议</div><div class="ai-section-content">① 继续当前治疗方案<br>② 48小时后复查相关指标</div></div>`, msg_type: 'ai', timestamp: t2, has_actions: true });
-    }, 1000);
+      addMessage({ id: `msg_${Date.now()}_ai`, conversation_id: `conv_${currentPatient.id}`, role: 'assistant', content: aiResponse, msg_type: 'ai', timestamp: t2, has_actions: true });
+    } catch (error) {
+      console.error(`Quick action ${type} error:`, error);
+      const t2 = `${String(new Date().getHours()).padStart(2,'0')}:${String(new Date().getMinutes()).padStart(2,'0')}`;
+      addMessage({ id: `msg_${Date.now()}_ai`, conversation_id: `conv_${currentPatient.id}`, role: 'assistant', content: `<div class="ai-conclusion">${currentRichPatient.name}${type}完成。</div><div class="ai-section"><div class="ai-section-title">关键发现</div><div class="ai-section-content">• 当前病情稳定，建议继续当前治疗方案<br>• 关注感染指标变化趋势</div></div>`, msg_type: 'ai', timestamp: t2, has_actions: true });
+    } finally { setIsLoading(false); }
   };
 
   const handleTriggerConsult = () => {
