@@ -2,6 +2,7 @@ use rusqlite::{Connection, Result, params};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Mutex;
+use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Patient {
@@ -15,6 +16,46 @@ pub struct Patient {
     pub admission_no: String,
     pub status: String,
     pub group_type: String,
+    pub surgery_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatientDetail {
+    pub patient: Patient,
+    pub initial_msgs: Vec<Message>,
+    pub push_msgs: Vec<Message>,
+    pub record: Option<MedicalRecord>,
+    pub orders: Vec<MedicalOrder>,
+    pub consults: Vec<ConsultItem>,
+    pub trends: Option<PatientTrend>,
+    pub drg: Option<PatientDrg>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsultItem {
+    pub dept: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatientTrend {
+    pub id: String,
+    pub patient_id: String,
+    pub wbc_data: String,  // JSON array
+    pub crp_data: String,  // JSON array
+    pub neut_data: String, // JSON array
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatientDrg {
+    pub id: String,
+    pub patient_id: String,
+    pub drg_group: String,
+    pub weight: f64,
+    pub estimated_cost: f64,
+    pub used_cost: f64,
+    pub risk: String,
+    pub suggestions: String,  // JSON array
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,6 +75,8 @@ pub struct Message {
     pub msg_type: String,
     pub timestamp: String,
     pub suggestions: Option<String>,
+    pub has_actions: Option<bool>,
+    pub is_risk: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -102,7 +145,8 @@ impl Database {
                 admission_date TEXT,
                 admission_no TEXT,
                 status TEXT,
-                group_type TEXT
+                group_type TEXT,
+                surgery_type TEXT DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS conversations (
@@ -121,6 +165,8 @@ impl Database {
                 msg_type TEXT,
                 timestamp TEXT,
                 suggestions TEXT,
+                has_actions INTEGER DEFAULT 0,
+                is_risk INTEGER DEFAULT 0,
                 FOREIGN KEY (conversation_id) REFERENCES conversations(id)
             );
 
@@ -170,10 +216,51 @@ impl Database {
                 created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS patient_trends (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL UNIQUE,
+                wbc_data TEXT NOT NULL,
+                crp_data TEXT NOT NULL,
+                neut_data TEXT NOT NULL,
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS patient_drg (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL UNIQUE,
+                drg_group TEXT NOT NULL,
+                weight REAL NOT NULL,
+                estimated_cost REAL NOT NULL,
+                used_cost REAL NOT NULL,
+                risk TEXT NOT NULL,
+                suggestions TEXT NOT NULL,
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS patient_consults (
+                id TEXT PRIMARY KEY,
+                patient_id TEXT NOT NULL,
+                dept TEXT NOT NULL,
+                content TEXT NOT NULL,
+                FOREIGN KEY (patient_id) REFERENCES patients(id)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_logs(user_id);
             CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);
-            CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);"
+            CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at);
+            CREATE INDEX IF NOT EXISTS idx_patient_consults ON patient_consults(patient_id);"
         )?;
+
+        // Migrate existing tables: add columns if missing
+        let _ = conn.execute_batch(
+            "ALTER TABLE patients ADD COLUMN surgery_type TEXT DEFAULT '';"
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE messages ADD COLUMN has_actions INTEGER DEFAULT 0;"
+        );
+        let _ = conn.execute_batch(
+            "ALTER TABLE messages ADD COLUMN is_risk INTEGER DEFAULT 0;"
+        );
 
         Ok(Database {
             conn: Mutex::new(conn),
@@ -184,7 +271,7 @@ impl Database {
     pub fn get_all_patients(&self) -> Result<Vec<Patient>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, name, bed_number, gender, age, diagnosis, admission_date, admission_no, status, group_type FROM patients"
+            "SELECT id, name, bed_number, gender, age, diagnosis, admission_date, admission_no, status, group_type, surgery_type FROM patients"
         )?;
 
         let patients = stmt.query_map([], |row| {
@@ -199,6 +286,7 @@ impl Database {
                 admission_no: row.get(7)?,
                 status: row.get(8)?,
                 group_type: row.get(9)?,
+                surgery_type: row.get(10)?,
             })
         })?;
 
@@ -208,8 +296,8 @@ impl Database {
     pub fn create_patient(&self, patient: &Patient) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO patients (id, name, bed_number, gender, age, diagnosis, admission_date, admission_no, status, group_type)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            "INSERT OR REPLACE INTO patients (id, name, bed_number, gender, age, diagnosis, admission_date, admission_no, status, group_type, surgery_type)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 patient.id,
                 patient.name,
@@ -221,6 +309,7 @@ impl Database {
                 patient.admission_no,
                 patient.status,
                 patient.group_type,
+                patient.surgery_type,
             ],
         )?;
         Ok(())
@@ -230,7 +319,7 @@ impl Database {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE patients SET name=?2, bed_number=?3, gender=?4, age=?5, diagnosis=?6,
-             admission_date=?7, admission_no=?8, status=?9, group_type=?10 WHERE id=?1",
+             admission_date=?7, admission_no=?8, status=?9, group_type=?10, surgery_type=?11 WHERE id=?1",
             params![
                 patient.id,
                 patient.name,
@@ -242,6 +331,7 @@ impl Database {
                 patient.admission_no,
                 patient.status,
                 patient.group_type,
+                patient.surgery_type,
             ],
         )?;
         Ok(())
@@ -296,7 +386,7 @@ impl Database {
     pub fn get_messages_by_conversation(&self, conversation_id: &str) -> Result<Vec<Message>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, conversation_id, role, content, msg_type, timestamp, suggestions 
+            "SELECT id, conversation_id, role, content, msg_type, timestamp, suggestions, has_actions, is_risk
              FROM messages WHERE conversation_id=?1 ORDER BY timestamp ASC"
         )?;
 
@@ -309,6 +399,8 @@ impl Database {
                 msg_type: row.get(4)?,
                 timestamp: row.get(5)?,
                 suggestions: row.get(6)?,
+                has_actions: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
+                is_risk: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
             })
         })?;
 
@@ -318,8 +410,8 @@ impl Database {
     pub fn create_message(&self, message: &Message) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
-            "INSERT INTO messages (id, conversation_id, role, content, msg_type, timestamp, suggestions)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO messages (id, conversation_id, role, content, msg_type, timestamp, suggestions, has_actions, is_risk)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 message.id,
                 message.conversation_id,
@@ -328,6 +420,8 @@ impl Database {
                 message.msg_type,
                 message.timestamp,
                 message.suggestions,
+                message.has_actions.map(|v| if v { 1 } else { 0 }).unwrap_or(0),
+                message.is_risk.map(|v| if v { 1 } else { 0 }).unwrap_or(0),
             ],
         )?;
         Ok(())
@@ -635,7 +729,7 @@ impl Database {
     pub fn get_all_messages_raw(&self) -> Result<Vec<Message>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, conversation_id, role, content, msg_type, timestamp, suggestions FROM messages"
+            "SELECT id, conversation_id, role, content, msg_type, timestamp, suggestions, has_actions, is_risk FROM messages"
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(Message {
@@ -646,6 +740,8 @@ impl Database {
                 msg_type: row.get(4)?,
                 timestamp: row.get(5)?,
                 suggestions: row.get(6)?,
+                has_actions: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
+                is_risk: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
             })
         })?;
         rows.collect()
@@ -694,6 +790,9 @@ impl Database {
              DELETE FROM medical_records;
              DELETE FROM medical_orders;
              DELETE FROM consultations;
+             DELETE FROM patient_trends;
+             DELETE FROM patient_drg;
+             DELETE FROM patient_consults;
              DELETE FROM patients;"
         )?;
         Ok(())
@@ -745,9 +844,9 @@ impl Database {
 
         for p in demo_patients {
             conn.execute(
-                "INSERT INTO patients (id, name, bed_number, gender, age, diagnosis, admission_date, admission_no, status, group_type)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                params![p.0, p.1, p.2, p.3, p.4, p.5, p.6, p.7, p.8, p.9],
+                "INSERT INTO patients (id, name, bed_number, gender, age, diagnosis, admission_date, admission_no, status, group_type, surgery_type)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                params![p.0, p.1, p.2, p.3, p.4, p.5, p.6, p.7, p.8, p.9, ""],
             )?;
         }
 
@@ -765,5 +864,263 @@ impl Database {
         }
 
         Ok(())
+    }
+
+    // ===== Patient Detail methods (v9.0) =====
+
+    pub fn get_patient_detail(&self, patient_id: &str) -> Result<PatientDetail> {
+        let conn = self.conn.lock().unwrap();
+        
+        // Get patient
+        let mut stmt = conn.prepare(
+            "SELECT id, name, bed_number, gender, age, diagnosis, admission_date, admission_no, status, group_type, surgery_type FROM patients WHERE id=?1"
+        )?;
+        let patient = stmt.query_row(params![patient_id], |row| {
+            Ok(Patient {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                bed_number: row.get(2)?,
+                gender: row.get(3)?,
+                age: row.get(4)?,
+                diagnosis: row.get(5)?,
+                admission_date: row.get(6)?,
+                admission_no: row.get(7)?,
+                status: row.get(8)?,
+                group_type: row.get(9)?,
+                surgery_type: row.get(10)?,
+            })
+        })?;
+
+        // Get messages
+        let conv_id = format!("conv_{}", patient_id);
+        let mut msg_stmt = conn.prepare(
+            "SELECT id, conversation_id, role, content, msg_type, timestamp, suggestions, has_actions, is_risk FROM messages WHERE conversation_id=?1 ORDER BY timestamp ASC"
+        )?;
+        let all_msgs: Vec<Message> = msg_stmt.query_map(params![conv_id], |row| {
+            Ok(Message {
+                id: row.get(0)?,
+                conversation_id: row.get(1)?,
+                role: row.get(2)?,
+                content: row.get(3)?,
+                msg_type: row.get(4)?,
+                timestamp: row.get(5)?,
+                suggestions: row.get(6)?,
+                has_actions: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
+                is_risk: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
+            })
+        })?.collect::<Result<Vec<_>>>()?;
+
+        // Split into initial and push messages (first 3 are initial)
+        let (initial_msgs, push_msgs) = if all_msgs.len() > 3 {
+            let (init, push) = all_msgs.split_at(3);
+            (init.to_vec(), push.to_vec())
+        } else {
+            (all_msgs, vec![])
+        };
+
+        // Get medical record
+        let mut rec_stmt = conn.prepare(
+            "SELECT id, patient_id, record_type, content, created_at FROM medical_records WHERE patient_id=?1 LIMIT 1"
+        )?;
+        let record = rec_stmt.query_row(params![patient_id], |row| {
+            Ok(MedicalRecord {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                record_type: row.get(2)?,
+                content: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        }).ok();
+
+        // Get orders
+        let mut ord_stmt = conn.prepare(
+            "SELECT id, patient_id, order_type, content, status, created_at FROM medical_orders WHERE patient_id=?1"
+        )?;
+        let orders: Vec<MedicalOrder> = ord_stmt.query_map(params![patient_id], |row| {
+            Ok(MedicalOrder {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                order_type: row.get(2)?,
+                content: row.get(3)?,
+                status: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?.collect::<Result<Vec<_>>>()?;
+
+        // Get consults
+        let mut con_stmt = conn.prepare(
+            "SELECT dept, content FROM patient_consults WHERE patient_id=?1"
+        )?;
+        let consults: Vec<ConsultItem> = con_stmt.query_map(params![patient_id], |row| {
+            Ok(ConsultItem {
+                dept: row.get(0)?,
+                content: row.get(1)?,
+            })
+        })?.collect::<Result<Vec<_>>>()?;
+
+        // Get trends
+        let mut trend_stmt = conn.prepare(
+            "SELECT id, patient_id, wbc_data, crp_data, neut_data FROM patient_trends WHERE patient_id=?1"
+        )?;
+        let trends = trend_stmt.query_row(params![patient_id], |row| {
+            Ok(PatientTrend {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                wbc_data: row.get(2)?,
+                crp_data: row.get(3)?,
+                neut_data: row.get(4)?,
+            })
+        }).ok();
+
+        // Get DRG
+        let mut drg_stmt = conn.prepare(
+            "SELECT id, patient_id, drg_group, weight, estimated_cost, used_cost, risk, suggestions FROM patient_drg WHERE patient_id=?1"
+        )?;
+        let drg = drg_stmt.query_row(params![patient_id], |row| {
+            Ok(PatientDrg {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                drg_group: row.get(2)?,
+                weight: row.get(3)?,
+                estimated_cost: row.get(4)?,
+                used_cost: row.get(5)?,
+                risk: row.get(6)?,
+                suggestions: row.get(7)?,
+            })
+        }).ok();
+
+        Ok(PatientDetail {
+            patient,
+            initial_msgs,
+            push_msgs,
+            record,
+            orders,
+            consults,
+            trends,
+            drg,
+        })
+    }
+
+    pub fn get_all_patient_details(&self) -> Result<Vec<PatientDetail>> {
+        let patients = self.get_all_patients()?;
+        let mut details = Vec::new();
+        for p in patients {
+            if let Ok(detail) = self.get_patient_detail(&p.id) {
+                details.push(detail);
+            }
+        }
+        Ok(details)
+    }
+
+    pub fn create_patient_detail(&self, detail: &PatientDetail) -> Result<()> {
+        // Create patient
+        self.create_patient(&detail.patient)?;
+
+        // Create conversation
+        let conv_id = format!("conv_{}", detail.patient.id);
+        let conv = Conversation {
+            id: conv_id.clone(),
+            patient_id: detail.patient.id.clone(),
+            title: format!("患者{}的会话", detail.patient.name),
+            created_at: detail.patient.admission_date.clone(),
+        };
+        let _ = self.create_conversation(&conv);
+
+        // Create messages
+        for msg in &detail.initial_msgs {
+            let _ = self.create_message(msg);
+        }
+        for msg in &detail.push_msgs {
+            let _ = self.create_message(msg);
+        }
+
+        // Create record
+        if let Some(ref record) = detail.record {
+            let _ = self.create_medical_record(record);
+        }
+
+        // Create orders
+        for order in &detail.orders {
+            let _ = self.create_medical_order(order);
+        }
+
+        // Create consults
+        let conn = self.conn.lock().unwrap();
+        for (i, consult) in detail.consults.iter().enumerate() {
+            let id = format!("consult_{}_{}", detail.patient.id, i);
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO patient_consults (id, patient_id, dept, content) VALUES (?1, ?2, ?3, ?4)",
+                params![id, detail.patient.id, consult.dept, consult.content],
+            );
+        }
+
+        // Create trends
+        if let Some(ref trend) = detail.trends {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO patient_trends (id, patient_id, wbc_data, crp_data, neut_data) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![trend.id, trend.patient_id, trend.wbc_data, trend.crp_data, trend.neut_data],
+            );
+        }
+
+        // Create DRG
+        if let Some(ref drg) = detail.drg {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO patient_drg (id, patient_id, drg_group, weight, estimated_cost, used_cost, risk, suggestions) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![drg.id, drg.patient_id, drg.drg_group, drg.weight, drg.estimated_cost, drg.used_cost, drg.risk, drg.suggestions],
+            );
+        }
+
+        Ok(())
+    }
+
+    pub fn get_patient_trends(&self, patient_id: &str) -> Result<Option<PatientTrend>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, patient_id, wbc_data, crp_data, neut_data FROM patient_trends WHERE patient_id=?1"
+        )?;
+        let trend = stmt.query_row(params![patient_id], |row| {
+            Ok(PatientTrend {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                wbc_data: row.get(2)?,
+                crp_data: row.get(3)?,
+                neut_data: row.get(4)?,
+            })
+        }).ok();
+        Ok(trend)
+    }
+
+    pub fn get_patient_drg(&self, patient_id: &str) -> Result<Option<PatientDrg>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT id, patient_id, drg_group, weight, estimated_cost, used_cost, risk, suggestions FROM patient_drg WHERE patient_id=?1"
+        )?;
+        let drg = stmt.query_row(params![patient_id], |row| {
+            Ok(PatientDrg {
+                id: row.get(0)?,
+                patient_id: row.get(1)?,
+                drg_group: row.get(2)?,
+                weight: row.get(3)?,
+                estimated_cost: row.get(4)?,
+                used_cost: row.get(5)?,
+                risk: row.get(6)?,
+                suggestions: row.get(7)?,
+            })
+        }).ok();
+        Ok(drg)
+    }
+
+    pub fn get_patient_consults(&self, patient_id: &str) -> Result<Vec<ConsultItem>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT dept, content FROM patient_consults WHERE patient_id=?1"
+        )?;
+        let consults = stmt.query_map(params![patient_id], |row| {
+            Ok(ConsultItem {
+                dept: row.get(0)?,
+                content: row.get(1)?,
+            })
+        })?.collect::<Result<Vec<_>>>()?;
+        Ok(consults)
     }
 }

@@ -430,6 +430,48 @@ pub fn import_backup(db: State<Database>, data: String) -> Result<String, String
     Ok("导入成功".to_string())
 }
 
+// ===== Patient Detail commands (v9.0) =====
+
+#[tauri::command]
+pub fn get_all_patient_details(db: State<Database>) -> ApiResponse<Vec<crate::db::PatientDetail>> {
+    match db.get_all_patient_details() {
+        Ok(details) => ApiResponse::success(details),
+        Err(e) => ApiResponse::error(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn get_patient_detail(db: State<Database>, patient_id: String) -> ApiResponse<crate::db::PatientDetail> {
+    match db.get_patient_detail(&patient_id) {
+        Ok(detail) => ApiResponse::success(detail),
+        Err(e) => ApiResponse::error(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn create_patient_detail(db: State<Database>, detail: crate::db::PatientDetail) -> ApiResponse<()> {
+    match db.create_patient_detail(&detail) {
+        Ok(_) => ApiResponse::success(()),
+        Err(e) => ApiResponse::error(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn get_patient_trends(db: State<Database>, patient_id: String) -> ApiResponse<Option<crate::db::PatientTrend>> {
+    match db.get_patient_trends(&patient_id) {
+        Ok(trends) => ApiResponse::success(trends),
+        Err(e) => ApiResponse::error(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn get_patient_drg(db: State<Database>, patient_id: String) -> ApiResponse<Option<crate::db::PatientDrg>> {
+    match db.get_patient_drg(&patient_id) {
+        Ok(drg) => ApiResponse::success(drg),
+        Err(e) => ApiResponse::error(e.to_string()),
+    }
+}
+
 // Window control commands
 #[tauri::command]
 pub fn minimize_window(window: tauri::Window) {

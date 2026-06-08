@@ -3,12 +3,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { useAuthStore } from './stores/authStore';
 import { usePatientStore } from './stores/patientStore';
 import { useChatStore } from './stores/chatStore';
-import { patientsData } from './data/patientData';
+import { loadAllPatientDetails } from './api/patientApi';
 import LoginOverlay from './components/LoginOverlay';
 import TitleBar from './components/TitleBar';
 import LeftPanel from './components/LeftPanel';
 import ChatPanel from './components/ChatPanel';
-import type { Patient, ApiResponse } from './types';
+import type { Patient, ApiResponse, PatientDetail, RichPatientData } from './types';
 import './styles/chat.css';
 import './styles/modals.css';
 import './styles/dark.css';
@@ -68,65 +68,142 @@ function App() {
   }, [isLoggedIn]);
 
   const loadPatients = async () => {
-    setRichPatients(patientsData);
     try {
-      const response = await invoke<ApiResponse<Patient[]>>('get_all_patients');
-      if (response.success && response.data && response.data.length > 0) {
-        setPatients(response.data);
-      } else {
-        const mapped: Patient[] = patientsData.map(p => ({
-          id: p.id, name: p.name, bed_number: p.bed, gender: p.sex, age: p.age,
-          diagnosis: p.dx, admission_date: '2026-05-27', admission_no: p.admission,
-          status: p.status, group_type: p.group,
-        }));
-        setPatients(mapped);
+      // Load patient details from database (v9.0)
+      const details = await loadAllPatientDetails();
+      
+      if (details.length === 0) {
+        console.warn('[ZY] No patient data in database');
+        return;
+      }
+      
+      // Convert to RichPatientData format
+      const richPatients = details.map(detailToRichPatient);
+      setRichPatients(richPatients);
+      
+      // Convert to Patient format for basic list
+      const patients: Patient[] = details.map(d => ({
+        id: d.patient.id,
+        name: d.patient.name,
+        bed_number: d.patient.bed_number,
+        gender: d.patient.gender,
+        age: d.patient.age,
+        diagnosis: d.patient.diagnosis,
+        admission_date: d.patient.admission_date,
+        admission_no: d.patient.admission_no,
+        status: d.patient.status,
+        group_type: d.patient.group_type,
+      }));
+      setPatients(patients);
+      
+      // Select first patient
+      const firstDetail = details[0];
+      if (firstDetail) {
+        selectPatientDetail(firstDetail);
       }
     } catch (e) {
-      console.warn('[ZY] Backend not available:', e);
-      const mapped: Patient[] = patientsData.map(p => ({
-        id: p.id, name: p.name, bed_number: p.bed, gender: p.sex, age: p.age,
-        diagnosis: p.dx, admission_date: '2026-05-27', admission_no: p.admission,
-        status: p.status, group_type: p.group,
-      }));
-      setPatients(mapped);
-    }
-
-    const firstRich = patientsData[0];
-    if (firstRich) {
-      setCurrentRichPatient(firstRich);
-      setCurrentPatient({
-        id: firstRich.id, name: firstRich.name, bed_number: firstRich.bed,
-        gender: firstRich.sex, age: firstRich.age, diagnosis: firstRich.dx,
-        admission_date: '2026-05-27', admission_no: firstRich.admission,
-        status: firstRich.status, group_type: firstRich.group,
-      });
-      const initialMsgs = firstRich.initialMsgs.map((m, i) => ({
-        id: `init_${firstRich.id}_${i}`,
-        conversation_id: `conv_${firstRich.id}`,
-        role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
-        content: m.text,
-        msg_type: m.type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
-        timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
-      }));
-      setMessages(initialMsgs);
-      let delay = 2000;
-      firstRich.pushSequence.forEach((m, i) => {
-        setTimeout(() => {
-          useChatStore.getState().addMessage({
-            id: `push_${firstRich.id}_${i}_${Date.now()}`,
-            conversation_id: `conv_${firstRich.id}`,
-            role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
-            content: m.text,
-            msg_type: m.type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
-            timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
-          });
-        }, delay);
-        delay += 2500;
-      });
+      console.error('[ZY] Failed to load patients:', e);
     }
   };
+  
+  // Convert PatientDetail from backend to RichPatientData for frontend
+  const detailToRichPatient = (detail: PatientDetail): RichPatientData => {
+    const p = detail.patient;
+    return {
+      id: p.id,
+      name: p.name,
+      sex: p.gender,
+      age: p.age,
+      bed: p.bed_number,
+      admission: p.admission_no,
+      dx: p.diagnosis,
+      status: p.status,
+      group: p.group_type,
+      surgeryType: p.surgery_type || '',
+      initialMsgs: detail.initial_msgs.map(m => ({
+        type: m.msg_type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
+        text: m.content,
+        time: m.timestamp,
+        actions: m.has_actions,
+        isRisk: m.is_risk,
+      })),
+      pushSequence: detail.push_msgs.map(m => ({
+        type: m.msg_type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
+        text: m.content,
+        time: m.timestamp,
+        actions: m.has_actions,
+        isRisk: m.is_risk,
+      })),
+      record: detail.record?.content || '',
+      orders: detail.orders.map(o => ({
+        name: o.order_type,
+        detail: o.content,
+      })),
+      consult: detail.consults,
+      trends: detail.trends ? {
+        wbc: JSON.parse(detail.trends.wbc_data || '[]'),
+        crp: JSON.parse(detail.trends.crp_data || '[]'),
+        neut: JSON.parse(detail.trends.neut_data || '[]'),
+      } : { wbc: [], crp: [], neut: [] },
+      drg: detail.drg ? {
+        group: detail.drg.drg_group,
+        weight: detail.drg.weight,
+        estimatedCost: detail.drg.estimated_cost,
+        usedCost: detail.drg.used_cost,
+        risk: detail.drg.risk,
+        suggestions: JSON.parse(detail.drg.suggestions || '[]'),
+      } : undefined,
+    };
+  };
+  
+  const selectPatientDetail = (detail: PatientDetail) => {
+    const richPatient = detailToRichPatient(detail);
+    setCurrentRichPatient(richPatient);
+    setCurrentPatient({
+      id: detail.patient.id,
+      name: detail.patient.name,
+      bed_number: detail.patient.bed_number,
+      gender: detail.patient.gender,
+      age: detail.patient.age,
+      diagnosis: detail.patient.diagnosis,
+      admission_date: detail.patient.admission_date,
+      admission_no: detail.patient.admission_no,
+      status: detail.patient.status,
+      group_type: detail.patient.group_type,
+    });
+    
+    const initialMsgs = detail.initial_msgs.map(m => ({
+      id: m.id,
+      conversation_id: m.conversation_id,
+      role: m.role,
+      content: m.content,
+      msg_type: m.msg_type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
+      timestamp: m.timestamp,
+      has_actions: m.has_actions,
+      is_risk: m.is_risk,
+    }));
+    setMessages(initialMsgs);
+    
+    // Schedule push messages
+    let delay = 2000;
+    detail.push_msgs.forEach((m, i) => {
+      setTimeout(() => {
+        useChatStore.getState().addMessage({
+          id: m.id || `push_${detail.patient.id}_${i}_${Date.now()}`,
+          conversation_id: m.conversation_id,
+          role: m.role,
+          content: m.content,
+          msg_type: m.msg_type as 'doctor' | 'ai' | 'lab' | 'nurse' | 'family' | 'imaging' | 'consult',
+          timestamp: m.timestamp,
+          has_actions: m.has_actions,
+          is_risk: m.is_risk,
+        });
+      }, delay);
+      delay += 2500;
+    });
+  };
 
-  const switchPatient = (richPatient: typeof patientsData[0]) => {
+  const switchPatient = (richPatient: RichPatientData) => {
     setCurrentRichPatient(richPatient);
     setCurrentPatient({
       id: richPatient.id, name: richPatient.name, bed_number: richPatient.bed,

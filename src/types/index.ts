@@ -140,3 +140,34 @@ export interface RichPatientData {
     suggestions: string[];
   };
 }
+
+// PatientDetail from backend (v9.0)
+export interface PatientDetail {
+  patient: Patient;
+  initial_msgs: Message[];
+  push_msgs: Message[];
+  record: MedicalRecord | null;
+  orders: MedicalOrder[];
+  consults: ConsultItem[];
+  trends: PatientTrend | null;
+  drg: PatientDrg | null;
+}
+
+export interface PatientTrend {
+  id: string;
+  patient_id: string;
+  wbc_data: string; // JSON array
+  crp_data: string;
+  neut_data: string;
+}
+
+export interface PatientDrg {
+  id: string;
+  patient_id: string;
+  drg_group: string;
+  weight: number;
+  estimated_cost: number;
+  used_cost: number;
+  risk: string;
+  suggestions: string; // JSON array
+}
