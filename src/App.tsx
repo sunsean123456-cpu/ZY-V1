@@ -4,6 +4,7 @@ import { useAuthStore } from './stores/authStore';
 import { usePatientStore } from './stores/patientStore';
 import { useChatStore } from './stores/chatStore';
 import { loadAllPatientDetails } from './api/patientApi';
+import { patientsData as mockPatientsData } from './data/patientData';
 import LoginOverlay from './components/LoginOverlay';
 import TitleBar from './components/TitleBar';
 import LeftPanel from './components/LeftPanel';
@@ -69,40 +70,64 @@ function App() {
 
   const loadPatients = async () => {
     try {
-      // Load patient details from database (v9.0)
+      // Try loading from database first (v9.0)
       const details = await loadAllPatientDetails();
       
-      if (details.length === 0) {
-        console.warn('[ZY] No patient data in database');
+      if (details.length > 0) {
+        console.log(`[ZY] Loaded ${details.length} patients from database`);
+        const richPatients = details.map(detailToRichPatient);
+        setRichPatients(richPatients);
+        const patients: Patient[] = details.map(d => ({
+          id: d.patient.id, name: d.patient.name, bed_number: d.patient.bed_number,
+          gender: d.patient.gender, age: d.patient.age, diagnosis: d.patient.diagnosis,
+          admission_date: d.patient.admission_date, admission_no: d.patient.admission_no,
+          status: d.patient.status, group_type: d.patient.group_type,
+        }));
+        setPatients(patients);
+        selectPatientDetail(details[0]);
         return;
       }
-      
-      // Convert to RichPatientData format
-      const richPatients = details.map(detailToRichPatient);
-      setRichPatients(richPatients);
-      
-      // Convert to Patient format for basic list
-      const patients: Patient[] = details.map(d => ({
-        id: d.patient.id,
-        name: d.patient.name,
-        bed_number: d.patient.bed_number,
-        gender: d.patient.gender,
-        age: d.patient.age,
-        diagnosis: d.patient.diagnosis,
-        admission_date: d.patient.admission_date,
-        admission_no: d.patient.admission_no,
-        status: d.patient.status,
-        group_type: d.patient.group_type,
-      }));
-      setPatients(patients);
-      
-      // Select first patient
-      const firstDetail = details[0];
-      if (firstDetail) {
-        selectPatientDetail(firstDetail);
-      }
     } catch (e) {
-      console.error('[ZY] Failed to load patients:', e);
+      console.warn('[ZY] Database not available, falling back to mock data:', e);
+    }
+    
+    // Fallback to mock data
+    console.log('[ZY] Using mock data (fallback)');
+    setRichPatients(mockPatientsData);
+    const mapped: Patient[] = mockPatientsData.map(p => ({
+      id: p.id, name: p.name, bed_number: p.bed, gender: p.sex, age: p.age,
+      diagnosis: p.dx, admission_date: '2026-05-27', admission_no: p.admission,
+      status: p.status, group_type: p.group,
+    }));
+    setPatients(mapped);
+    const first = mockPatientsData[0];
+    if (first) {
+      setCurrentRichPatient(first);
+      setCurrentPatient({
+        id: first.id, name: first.name, bed_number: first.bed,
+        gender: first.sex, age: first.age, diagnosis: first.dx,
+        admission_date: '2026-05-27', admission_no: first.admission,
+        status: first.status, group_type: first.group,
+      });
+      const msgs = first.initialMsgs.map((m, i) => ({
+        id: `init_${first.id}_${i}`, conversation_id: `conv_${first.id}`,
+        role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
+        content: m.text, msg_type: m.type as any,
+        timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
+      }));
+      setMessages(msgs);
+      let delay = 2000;
+      first.pushSequence.forEach((m, i) => {
+        setTimeout(() => {
+          useChatStore.getState().addMessage({
+            id: `push_${first.id}_${i}_${Date.now()}`, conversation_id: `conv_${first.id}`,
+            role: m.type === 'doctor' ? 'user' as const : 'assistant' as const,
+            content: m.text, msg_type: m.type as any,
+            timestamp: m.time, has_actions: m.actions, is_risk: m.isRisk,
+          });
+        }, delay);
+        delay += 2500;
+      });
     }
   };
   
